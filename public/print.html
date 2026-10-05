@@ -1,367 +1,316 @@
 <!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kiosk</title>
-    <style>
-        body {
-            font: 16px/1.5 system-ui,sans-serif;
-            max-width: 34rem;
-            margin: 1.5rem auto;
-            padding: 0 1rem
-        }
-
-        input {
-            font: inherit;
-            width: 100%;
-            box-sizing: border-box;
-            margin: .2rem 0 .8rem
-        }
-
-        button {
-            font: inherit;
-            padding: .6rem 1rem
-        }
-
-        pre {
-            background: #eee;
-            color: #111;
-            padding: .6rem;
-            overflow: auto;
-            max-height: 40vh
-        }
-    </style>
-</head>
-<body>
-    <h1>Label kiosk</h1>
-    <label>Kiosk key <input id="key" value="change-me"></label>
-    <label>
-        BLE service UUID
-        <select id="svcSel">
-            <option value="0000ff00-0000-1000-8000-00805f9b34fb">FF00</option>
-            <option value="e7810a71-73ae-499d-8c15-faa9aefc3f2">E781</option>
-            <option value="49535343-fe7d-4ae5-8fa9-9fafd205e455">4953</option>
-            <option value="">Auto / Other...</option>
-        </select>
-        <input id="svc" hidden>
-    </label>
-    <label>
-        BLE write characteristic UUID
-        <select id="chrSel">
-            <option value="0000ff02-0000-1000-8000-00805f9b34fb">FF02</option>
-            <option value="">Auto / Other...</option>
-        </select>
-        <input id="chr" hidden>
-    </label>
-    <label>
-        Label width in pixels (203 DPI, 4in ≈ 812 px, 4.1in ≈ 832 px)
-        <input id="w" value="832" inputmode="numeric">
-    </label>
-    <label>
-        Logical label height (4x6in = 1218 px)
-        <input id="h" value="1218" inputmode="numeric">
-    </label>
-    <label>
-        Protocol
-        <select id="variant">
-            <option value="M421">M421 / M110-family</option>
-            <option value="D">Raster only (troubleshooting)</option>
-        </select>
-    </label>
-    <button id="pair">1. Pair printer</button>
-    <button id="test">Test print</button>
-    <button id="start">2. Start listening</button>
-    <p id="status">Not connected.</p>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiosk</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:1.5rem auto;padding:0 1rem}
+input{font:inherit;width:100%;box-sizing:border-box;margin:.2rem 0 .8rem}
+button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6rem;overflow:auto;max-height:40vh}
+</style></head><body>
+<h1>Label kiosk</h1>
+<label>Kiosk key <input id="key" value="change-me"></label>
+<label>BLE service UUID
+  <select id="svcSel">
+    <option value="0000ff00-0000-1000-8000-00805f9b34fb">FF00</option>
+    <option value="e7810a71-73ae-499d-8c15-faa9aefc3f2">E781</option>
+    <option value="49535343-fe7d-4ae5-8fa9-9fafd205e455">4953</option>
+    <option value="">Auto / Other...</option>
+  </select>
+  <input id="svc" hidden>
+</label>
+<label>BLE write characteristic UUID
+  <select id="chrSel">
+    <option value="0000ff02-0000-1000-8000-00805f9b34fb">FF02</option>
+    <option value="">Auto / Other...</option>
+  </select>
+  <input id="chr" hidden>
+</label>
+<label>Label width in pixels (203 DPI, 4in ≈ 812 px, 4.1in ≈ 832 px)
+  <input id="w" value="832" inputmode="numeric">
+</label>
+<label>Label height in pixels (4x6in ≈ 1218 px)
+  <input id="h" value="1218" inputmode="numeric">
+</label>
+<label>Protocol
+  <select id="variant">
+    <option value="M421">M421 / M110-family</option>
+    <option value="D">Raster only (troubleshooting)</option>
+  </select>
+</label>
+<button id="pair">1. Pair printer</button>
+<button id="test">Test print</button>
+<button id="start">2. Start listening</button>
+<p id="status">Not connected.</p>
 <pre id="log"></pre>
-    <canvas id="cv" hidden></canvas>
-    <script>
-        const $ = id => document.getElementById(id);
-        const log = s => { $("log").textContent = s + "\n" + $("log").textContent; };
-        for (const id of ["key", "svc", "chr", "w", "h"]) {
-            const v = localStorage.getItem("k_" + id); if (v) $(id).value = v;
-            $(id).oninput = () => localStorage.setItem("k_" + id, $(id).value);
+<canvas id="cv" hidden></canvas>
+<script>
+const $ = id => document.getElementById(id);
+const log = s => { $("log").textContent = s + "\n" + $("log").textContent; };
+for (const id of ["key","svc","chr","w","h"]) {
+  const v = localStorage.getItem("k_" + id); if (v) $(id).value = v;
+  $(id).oninput = () => localStorage.setItem("k_" + id, $(id).value);
+}
+// UUID dropdowns: a preset fills the hidden input; "Other..." reveals it for a custom UUID.
+for (const [sel, inp] of [["svcSel", "svc"], ["chrSel", "chr"]]) {
+  const s = $(sel), i = $(inp);
+  const sync = () => {
+    i.hidden = s.value !== "";
+    if (s.value) i.value = s.value;
+    localStorage.setItem("k_" + inp, i.value);
+  };
+  const saved = i.value && [...s.options].some(o => o.value === i.value);
+  s.value = saved ? i.value : (i.value ? "" : s.options[0].value);
+  s.onchange = sync; sync();
+}
+let chr = null;
+
+const COMMON_SERVICES = [
+  "0000ff00-0000-1000-8000-00805f9b34fb",
+  "e7810a71-73ae-499d-8c15-faa9aefc3f2",
+  "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+];
+const FF02 = "0000ff02-0000-1000-8000-00805f9b34fb";
+
+async function findM421Service(server) {
+  const requested = $("svc").value.trim().toLowerCase();
+  const candidates = requested
+    ? [requested, ...COMMON_SERVICES.filter(x => x !== requested)]
+    : COMMON_SERVICES;
+
+  for (const uuid of candidates) {
+    try { return await server.getPrimaryService(uuid); }
+    catch (_) {}
+  }
+
+  try {
+    const services = await server.getPrimaryServices();
+    for (const service of services) {
+      const chars = await service.getCharacteristics();
+      if (chars.some(c => c.uuid === FF02 ||
+          c.properties.write || c.properties.writeWithoutResponse)) {
+        return service;
+      }
+    }
+  } catch (_) {}
+
+  throw new Error("Could not find an M421 printer service.");
+}
+
+async function findWriteCharacteristic(service) {
+  const requested = $("chr").value.trim().toLowerCase();
+  const chars = await service.getCharacteristics();
+
+  if (requested) {
+    const exact = chars.find(c => c.uuid === requested);
+    if (exact) return exact;
+  }
+
+  const ff02 = chars.find(c => c.uuid === FF02);
+  if (ff02) return ff02;
+
+  const writable = chars.find(c =>
+    c.properties.writeWithoutResponse || c.properties.write);
+  if (writable) return writable;
+
+  throw new Error("No writable BLE characteristic found.");
+}
+
+$("pair").onclick = async () => {
+  try {
+    const requested = $("svc").value.trim().toLowerCase();
+    const optionalServices = [...new Set([
+      ...(requested ? [requested] : []),
+      ...COMMON_SERVICES
+    ])];
+
+    const dev = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices
+    });
+
+    const server = await dev.gatt.connect();
+    dev.addEventListener("gattserverdisconnected", () => {
+      chr = null;
+      $("status").textContent = "Disconnected. Pair again.";
+      log("Printer disconnected");
+    });
+
+    const service = await findM421Service(server);
+    chr = await findWriteCharacteristic(service);
+
+    log("Using service " + service.uuid);
+    log("Using characteristic " + chr.uuid);
+    const props = chr.properties;
+    log(`Write char props: write=${props.write} writeNoResp=${props.writeWithoutResponse}`);
+
+    for (const c of await service.getCharacteristics()) {
+      log("Found characteristic " + c.uuid +
+          (c.properties.notify ? " (notify)" : ""));
+      if (c.properties.notify) {
+        try {
+          await c.startNotifications();
+          c.addEventListener("characteristicvaluechanged", e =>
+            log("Printer replied on " + c.uuid + ": " +
+              [...new Uint8Array(e.target.value.buffer)]
+                .map(b => b.toString(16).padStart(2, "0")).join(" ")));
+        } catch (e) {
+          log("Notify failed on " + c.uuid + ": " + e.message);
         }
-        // UUID dropdowns: a preset fills the hidden input; "Other..." reveals it for a custom UUID.
-        for (const [sel, inp] of [["svcSel", "svc"], ["chrSel", "chr"]]) {
-            const s = $(sel), i = $(inp);
-            const sync = () => {
-                i.hidden = s.value !== "";
-                if (s.value) i.value = s.value;
-                localStorage.setItem("k_" + inp, i.value);
-            };
-            const saved = i.value && [...s.options].some(o => o.value === i.value);
-            s.value = saved ? i.value : (i.value ? "" : s.options[0].value);
-            s.onchange = sync; sync();
-        }
-        let chr = null;
+      }
+    }
 
-        const COMMON_SERVICES = [
-            "0000ff00-0000-1000-8000-00805f9b34fb",
-            "e7810a71-73ae-499d-8c15-faa9aefc3f2",
-            "49535343-fe7d-4ae5-8fa9-9fafd205e455"
-        ];
-        const FF02 = "0000ff02-0000-1000-8000-00805f9b34fb";
+    $("status").textContent = "Paired with " + (dev.name || "Phomemo M421");
+  } catch (e) {
+    $("status").textContent = "Pair failed: " + e.message;
+    log("Pair failed: " + e.message);
+  }
+};
 
-        async function findM421Service(server) {
-            const requested = $("svc").value.trim().toLowerCase();
-            const candidates = requested
-                ? [requested, ...COMMON_SERVICES.filter(x => x !== requested)]
-                : COMMON_SERVICES;
+// Render text lines to a 1-bit bitmap.
+function render(lines) {
+  let W = Math.max(8, Math.floor(+$('w').value));
+  W -= W % 8;
+  const H = Math.max(8, Math.floor(+$('h').value));
+  const cv = $('cv');
+  cv.width = W;
+  cv.height = H;
 
-            for (const uuid of candidates) {
-                try { return await server.getPrimaryService(uuid); }
-                catch (_) { }
-            }
+  const c = cv.getContext('2d', { alpha: false });
+  c.fillStyle = '#fff';
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = '#000';
+  c.textBaseline = 'alphabetic';
 
-            try {
-                const services = await server.getPrimaryServices();
-                for (const service of services) {
-                    const chars = await service.getCharacteristics();
-                    if (chars.some(c => c.uuid === FF02 ||
-                        c.properties.write || c.properties.writeWithoutResponse)) {
-                        return service;
-                    }
-                }
-            } catch (_) { }
+  let y = 60;
+  for (const l of lines) {
+    c.font = (y === 60 ? 'bold 52px' : '34px') + ' sans-serif';
+    let line = '';
 
-            throw new Error("Could not find an M421 printer service.");
-        }
+    for (const word of String(l).split(' ')) {
+      const candidate = line ? line + word : word;
+      if (c.measureText(candidate).width > W - 60 && line) {
+        c.fillText(line, 30, y);
+        y += 44;
+        line = '';
+      }
+      line += word + ' ';
+    }
 
-        async function findWriteCharacteristic(service) {
-            const requested = $("chr").value.trim().toLowerCase();
-            const chars = await service.getCharacteristics();
+    if (y < H - 10) {
+      c.fillText(line, 30, y);
+      y += 48;
+    }
+    if (y >= H - 10) break;
+  }
 
-            if (requested) {
-                const exact = chars.find(c => c.uuid === requested);
-                if (exact) return exact;
-            }
+  const px = c.getImageData(0, 0, W, H).data;
+  const rowBytes = W / 8;
+  const out = new Uint8Array(rowBytes * H);
 
-            const ff02 = chars.find(c => c.uuid === FF02);
-            if (ff02) return ff02;
+  for (let i = 0; i < W * H; i++) {
+    if (px[i * 4] < 128) out[i >> 3] |= 0x80 >> (i & 7);
+  }
 
-            const writable = chars.find(c =>
-                c.properties.writeWithoutResponse || c.properties.write);
-            if (writable) return writable;
+  return { out, rowBytes, H, W };
+}
 
-            throw new Error("No writable BLE characteristic found.");
-        }
+function concatBytes(...parts) {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.length;
+  }
+  return out;
+}
 
-        $("pair").onclick = async () => {
-            try {
-                const requested = $("svc").value.trim().toLowerCase();
-                const optionalServices = [...new Set([
-                    ...(requested ? [requested] : []),
-                    ...COMMON_SERVICES
-                ])];
+function m421Header(mediaType = 0x0a, speed = 5, density = 10) {
+  // M421 is in the M110-family:
+  // ESC N 0D <speed>, ESC N 04 <density>, 1F 11 <media type>.
+  return new Uint8Array([
+    0x1b, 0x4e, 0x0d, speed,
+    0x1b, 0x4e, 0x04, density,
+    0x1f, 0x11, mediaType
+  ]);
+}
 
-                const dev = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices
-                });
+function m421RasterBlocks(out, rowBytes, height) {
+  // Keep each GS v 0 block at 255 rows or less.
+  const blocks = [];
+  for (let line = 0; line < height; line += 255) {
+    const lines = Math.min(255, height - line);
+    blocks.push(
+      new Uint8Array([
+        0x1d, 0x76, 0x30, 0x00,
+        rowBytes & 0xff, (rowBytes >> 8) & 0xff,
+        lines & 0xff, (lines >> 8) & 0xff
+      ]),
+      out.slice(line * rowBytes, (line + lines) * rowBytes)
+    );
+  }
+  return concatBytes(...blocks);
+}
 
-                const server = await dev.gatt.connect();
-                dev.addEventListener("gattserverdisconnected", () => {
-                    chr = null;
-                    $("status").textContent = "Disconnected. Pair again.";
-                    log("Printer disconnected");
-                });
+function m421Footer() {
+  // M110-family completion/status commands.
+  return new Uint8Array([
+    0x1f, 0xf0, 0x05, 0x00,
+    0x1f, 0xf0, 0x03, 0x00
+  ]);
+}
 
-                const service = await findM421Service(server);
-                chr = await findWriteCharacteristic(service);
+async function writePrinter(data) {
+  if (!chr) throw new Error('Printer is not connected.');
+  const noResp = chr.properties.writeWithoutResponse;
+  const chunkSize = 128;
+  log(`Sending ${data.length} bytes (${noResp ? 'without response' : 'with response'})`);
 
-                log("Using service " + service.uuid);
-                log("Using characteristic " + chr.uuid);
-                const props = chr.properties;
-                log(`Write char props: write=${props.write} writeNoResp=${props.writeWithoutResponse}`);
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const chunk = data.slice(i, i + chunkSize);
+    if (noResp) await chr.writeValueWithoutResponse(chunk);
+    else await chr.writeValueWithResponse(chunk);
+    await new Promise(r => setTimeout(r, 12));
+  }
+}
 
-                for (const c of await service.getCharacteristics()) {
-                    log("Found characteristic " + c.uuid +
-                        (c.properties.notify ? " (notify)" : ""));
-                    if (c.properties.notify) {
-                        try {
-                            await c.startNotifications();
-                            c.addEventListener("characteristicvaluechanged", e =>
-                                log("Printer replied on " + c.uuid + ": " +
-                                    [...new Uint8Array(e.target.value.buffer)]
-                                        .map(b => b.toString(16).padStart(2, "0")).join(" ")));
-                        } catch (e) {
-                            log("Notify failed on " + c.uuid + ": " + e.message);
-                        }
-                    }
-                }
+async function print(lines) {
+  const { out, rowBytes, H, W } = render(lines);
+  log(`Rendering ${W} x ${H} pixels (${rowBytes} bytes/row)`);
+  const raster = m421RasterBlocks(out, rowBytes, H);
 
-                $("status").textContent = "Paired with " + (dev.name || "Phomemo M421");
-            } catch (e) {
-                $("status").textContent = "Pair failed: " + e.message;
-                log("Pair failed: " + e.message);
-            }
-        };
+  if ($('variant').value === 'D') {
+    await writePrinter(raster);
+    return;
+  }
 
-        // Render a 4x6 label for the M421.
-        //
-        // The M421 firmware path currently being used expands the raster vertically
-        // by approximately 4x. At 203 DPI, a physical 6-inch label would normally
-        // require 1218 lines, so we send 1218 / 4 = 304.5, rounded to 305 lines.
-        // This keeps the rendered text proportions normal instead of vertically
-        // squashing a 1218-line canvas.
-        function render(lines) {
-            let W = Math.max(8, Math.floor(+$("w").value));
-            W -= W % 8;
+  await writePrinter(concatBytes(
+    m421Header(0x0a, 5, 10),
+    raster,
+    m421Footer()
+  ));
+}
 
-            const requestedH = Math.max(8, Math.floor(+$("h").value));
-            const H = Math.max(8, Math.round(requestedH / 4));
+const labelLines = d => [
+  "Device label", d.platform + " · " + d.screen + " @" + d.dpr + "x",
+  d.language + " · " + d.timezone, (d.city || "?") + ", " + (d.country || "?") + "  " + d.ip,
+  d.userAgent, d.time,
+];
 
-            const cv = $("cv");
-            cv.width = W;
-            cv.height = H;
+$("test").onclick = () => chr ? print(["Test print", "Hello from the kiosk"]).catch(e => log(e.message)) : log("Pair first.");
 
-            const c = cv.getContext("2d", { alpha: false });
-            c.fillStyle = "#fff";
-            c.fillRect(0, 0, W, H);
-            c.fillStyle = "#000";
-            c.textBaseline = "alphabetic";
-
-            // Scale the text/layout from the normal 4x6 logical height into
-            // the compressed raster sent to the printer.
-            const scale = H / requestedH;
-            c.save();
-            c.scale(scale, scale);
-
-            let y = 60;
-            for (const l of lines) {
-                c.font = (y === 60 ? "bold 52px" : "34px") + " sans-serif";
-                let line = "";
-
-                for (const word of String(l).split(" ")) {
-                    const candidate = line ? line + word : word;
-                    if (c.measureText(candidate).width > W / scale - 60 && line) {
-                        c.fillText(line, 30, y);
-                        y += 44;
-                        line = "";
-                    }
-                    line += word + " ";
-                }
-
-                if (y < requestedH - 10) {
-                    c.fillText(line, 30, y);
-                    y += 48;
-                }
-                if (y >= requestedH - 10) break;
-            }
-
-            c.restore();
-
-            const px = c.getImageData(0, 0, W, H).data;
-            const rowBytes = W / 8;
-            const out = new Uint8Array(rowBytes * H);
-
-            for (let i = 0; i < W * H; i++) {
-                if (px[i * 4] < 128) out[i >> 3] |= 0x80 >> (i & 7);
-            }
-
-            return { out, rowBytes, H, W, requestedH };
-        }
-
-        function concatBytes(...parts) {
-            const total = parts.reduce((n, p) => n + p.length, 0);
-            const out = new Uint8Array(total);
-            let offset = 0;
-            for (const p of parts) {
-                out.set(p, offset);
-                offset += p.length;
-            }
-            return out;
-        }
-
-        function m421Header(mediaType = 0x0a, speed = 5, density = 10) {
-            // M421 is in the M110-family:
-            // ESC N 0D <speed>, ESC N 04 <density>, 1F 11 <media type>.
-            return new Uint8Array([
-                0x1b, 0x4e, 0x0d, speed,
-                0x1b, 0x4e, 0x04, density,
-                0x1f, 0x11, mediaType
-            ]);
-        }
-
-        function m421RasterBlocks(out, rowBytes, height) {
-            // Keep each GS v 0 block at 255 rows or less.
-            const blocks = [];
-            for (let line = 0; line < height; line += 255) {
-                const lines = Math.min(255, height - line);
-                blocks.push(
-                    new Uint8Array([
-                        0x1d, 0x76, 0x30, 0x00,
-                        rowBytes & 0xff, (rowBytes >> 8) & 0xff,
-                        lines & 0xff, (lines >> 8) & 0xff
-                    ]),
-                    out.slice(line * rowBytes, (line + lines) * rowBytes)
-                );
-            }
-            return concatBytes(...blocks);
-        }
-
-        function m421Footer() {
-            // M110-family completion/status commands.
-            return new Uint8Array([
-                0x1f, 0xf0, 0x05, 0x00,
-                0x1f, 0xf0, 0x03, 0x00
-            ]);
-        }
-
-        async function writePrinter(data) {
-            if (!chr) throw new Error('Printer is not connected.');
-            const noResp = chr.properties.writeWithoutResponse;
-            const chunkSize = 128;
-            log(`Sending ${data.length} bytes (${noResp ? 'without response' : 'with response'})`);
-
-            for (let i = 0; i < data.length; i += chunkSize) {
-                const chunk = data.slice(i, i + chunkSize);
-                if (noResp) await chr.writeValueWithoutResponse(chunk);
-                else await chr.writeValueWithResponse(chunk);
-                await new Promise(r => setTimeout(r, 12));
-            }
-        }
-
-        async function print(lines) {
-            const { out, rowBytes, H, W } = render(lines);
-            log(`Rendering ${W} x ${requestedH} logical px -> ${H} raster lines (${rowBytes} bytes/row), M421 vertical compensation 4x`);
-            const raster = m421RasterBlocks(out, rowBytes, H);
-
-            if ($('variant').value === 'D') {
-                await writePrinter(raster);
-                return;
-            }
-
-            await writePrinter(concatBytes(
-                m421Header(0x0a, 5, 10),
-                raster,
-                m421Footer()
-            ));
-        }
-
-        const labelLines = d => [
-            "Device label", d.platform + " · " + d.screen + " @" + d.dpr + "x",
-            d.language + " · " + d.timezone, (d.city || "?") + ", " + (d.country || "?") + "  " + d.ip,
-            d.userAgent, d.time,
-        ];
-
-        $("test").onclick = () => chr ? print(["Test print", "Hello from the kiosk"]).catch(e => log(e.message)) : log("Pair first.");
-
-        $("start").onclick = () => {
-            if (!chr) return log("Pair first.");
-            $("status").textContent = "Listening...";
-            let busy = false;
-            setInterval(async () => {
-                if (busy) return; busy = true;
-                try {
-                    const k = encodeURIComponent($("key").value);
-                    const job = await (await fetch("/api/next?key=" + k)).json();
-                    if (job) { await print(labelLines(job.data)); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
-                } catch (e) { log("Error: " + e.message); }
-                busy = false;
-            }, 3000);
-        };
-    </script>
-</body>
-</html>
+$("start").onclick = () => {
+  if (!chr) return log("Pair first.");
+  $("status").textContent = "Listening...";
+  let busy = false;
+  setInterval(async () => {
+    if (busy) return; busy = true;
+    try {
+      const k = encodeURIComponent($("key").value);
+      const job = await (await fetch("/api/next?key=" + k)).json();
+      if (job) { await print(labelLines(job.data)); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
+    } catch (e) { log("Error: " + e.message); }
+    busy = false;
+  }, 3000);
+};
+</script></body></html>
