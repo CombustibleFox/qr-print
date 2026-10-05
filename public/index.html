@@ -13,16 +13,29 @@ p{margin:.2em 0}
 .frame{width:min(100%,40rem);aspect-ratio:16/9;margin:1.2rem 0;border:3px solid var(--o);border-radius:.6rem;
 box-shadow:0 0 1.5rem #ff7a0088;overflow:hidden;background:#000}
 .frame iframe{width:100%;height:100%;border:0;display:block}
+p.scary{font-size:1.3rem;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;margin:.6rem 0 .2rem;text-shadow:0 0 .5em #ff7a0099}
 #msg{min-height:1.5em;font-weight:bold}
 small{display:block;max-width:34rem;color:#a85a1a;font-size:.75rem;line-height:1.4;margin-top:1.2rem}
 </style></head><body>
 <h1>🎃 Happy Halloween 🎃</h1>
 <p class="sub">Enjoy a little something while we look you up...</p>
 <div class="frame"><iframe id="yt" title="Spooky video" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+<p class="scary">👻 Data privacy is scary. 👻</p>
 <p id="msg" role="status">Dusting for fingerprints...</p>
-<small>This is a data privacy education qr code. When you open this page, it reads what your browser reveals to any website (device, screen, hardware, language, time zone, battery, network, graphics card, etc.) plus an approximate location from your IP address. It also asks for camera access: allow it and one photo of you is printed; Nothing is kept after printing.</small>
+<small>This is a data privacy education website. When you open this page, it reads what your browser reveals to any website (device, screen, hardware, language, time zone, battery, network, graphics card, etc.) plus an approximate location from your IP address. It also asks for camera access: allow it and one photo of you is printed; NO DATA OR PHOTOS ARE KEPT after printing.</small>
 <script>
-const VIDEOS = ["dQw4w9WgXcQ", "v45YO1zepHg", "q6-ZGAGcJrk", "sOnqjkJTMaA"]; // Rick Roll, Spooky Scary Skeletons (+ remix), Thriller
+const VIDEOS = [
+  "dQw4w9WgXcQ", // Rick Roll
+  "v45YO1zepHg", "q6-ZGAGcJrk", // Spooky Scary Skeletons (+ remix)
+  "sOnqjkJTMaA", // Thriller
+  "NSqkvsOv3VA", // Monster Mash
+  "ZVuToMilP0A", // This Is Halloween
+  "Fe93CLbHjxQ", // Ghostbusters
+  "gLOWtHoBzuU", // The Addams Family theme
+  "gEYgyWC_BpM", // Hocus Pocus: Come Little Children
+  "AQXVHITd1N4", // Beetlejuice: Day-O
+  "gqVyois9mp4", // Halloween (John Carpenter theme)
+];
 document.getElementById("yt").src = "https://www.youtube-nocookie.com/embed/" + VIDEOS[Math.floor(Math.random() * VIDEOS.length)] + "?autoplay=1&playsinline=1&rel=0";
 const safe = async (fn, dflt = null) => { try { return await fn(); } catch { return dflt; } };
 const mq = q => matchMedia(q).matches;
@@ -167,7 +180,7 @@ async function snap() {
     msg.textContent = "Say cheese? 📸";
     Object.assign(info, await snap());
     const r = await fetch("/api/submit", { method: "POST", body: JSON.stringify(info) });
-    msg.textContent = r.ok ? "Your dossier is printing. 🖨️👻" : "The ghosts ate your data. Reload to retry.";
+    msg.textContent = r.ok ? "Your dossier is printing. 🖨️👻" : "The ghosts ate your data.";
   } catch { msg.textContent = "No connection. Reload to retry."; }
 })();
 </script></body></html>

@@ -399,6 +399,9 @@ function photoBox(c, d, x, y, S) {
   c.textAlign = "left";
 }
 
+    const HEADLINES = ["Trick or Tracked!", "Boo! Gotcha!",
+  "Trick or treat? TRICK!"];
+
 function dossier(d) {
   return (c, W, H) => {
     // Thermal paper washes out thin strokes: add a thin outline to every piece of text.
@@ -420,7 +423,7 @@ function dossier(d) {
     // Greeting
     const where = [d.city, d.region].filter(Boolean).join(", ") || d.country || "somewhere";
     c.font = `bold 38px ${FONT}`;
-    c.fillText("BOO! Gotcha!", M, y + 52);
+    c.fillText(fit(c, HEADLINES[Math.floor(Math.random() * HEADLINES.length)], IW - 130), M, y + 52);
     c.font = `22px ${FONT}`;
     c.fillText(fit(c, `Caught: ${deviceKind(d)} in ${where}`, IW - 130), M, y + 84);
     pumpkin(c, W - M - 62, y + 56, 36);
@@ -452,7 +455,7 @@ function dossier(d) {
       ]],
     ];
 
-    const LH = 27, KEY_W = 140;
+    const LH = 26, KEY_W = 140;
     const PH = 270, photoTop = y + 4, photoBottom = photoTop + PH; // photo box
     for (const [i, [title, rows]] of sections.entries()) {
       if (i === 0) photoBox(c, d, W - M - PH, photoTop, PH);
@@ -491,15 +494,15 @@ function dossier(d) {
     const msg = "Your device's unique mix of hardware, software and settings is a fingerprint. " +
       "Trackers use it to recognize you across different websites and networks, even in private mode, with cookies off, or on new Wi-Fi.";
     c.font = `20px ${FONT}`;
-    const ml = wrap(c, msg, IW - 36, 6), bh = 56 + ml.length * 25;
-    const by = Math.max(y + 4, H - bh - 46);
+    const ml = wrap(c, msg, IW - 36, 6), bh = 48 + ml.length * 24;
+    const by = Math.max(y + 4, H - bh - 50);
     c.lineWidth = 4; c.strokeRect(M, by, IW, bh);
-    c.font = `bold 24px ${FONT}`; c.fillText("YOU CAN BE FOLLOWED", M + 18, by + 36);
+    c.font = `bold 24px ${FONT}`; c.fillText("YOU CAN BE FOLLOWED", M + 18, by + 34);
     c.font = `20px ${FONT}`;
-    ml.forEach((l, k) => c.fillText(l, M + 18, by + 64 + k * 25));
+    ml.forEach((l, k) => c.fillText(l, M + 18, by + 62 + k * 24));
     c.textAlign = "center";
-    c.font = `20px ${FONT}`;
-    c.fillText("Happy Halloween! " + new Date(d.time || Date.now()).toLocaleString(), W / 2, by + bh + 30);
+    c.font = `bold 21px ${FONT}`;
+    c.fillText("Happy Halloween! DATA PRIVACY IS SCARY.", W / 2, by + bh + 30);
     c.textAlign = "left";
   };
 }

@@ -1,5 +1,5 @@
 // Worker: /api/submit (visitor) -> queue; /api/next + /api/ack (kiosk).
-const KIOSK_KEY = "change-me"; // kiosk must send ?key=... (use `wrangler secret` for real use)
+// The kiosk must send ?key=... matching the KIOSK_KEY Worker secret (set with `wrangler secret put KIOSK_KEY`).
 
 export default {
   async fetch(req, env) {
@@ -20,7 +20,7 @@ export default {
       info.time = new Date().toISOString();
       return q.fetch("https://q/push", { method: "POST", body: JSON.stringify(info) });
     }
-    if (url.pathname.startsWith("/api/") && url.searchParams.get("key") !== KIOSK_KEY)
+    if (url.pathname.startsWith("/api/") && (!env.KIOSK_KEY || url.searchParams.get("key") !== env.KIOSK_KEY))
       return new Response("forbidden", { status: 403 });
     if (url.pathname === "/api/next") return q.fetch("https://q/next");
     if (url.pathname === "/api/ack") return q.fetch("https://q/ack?id=" + url.searchParams.get("id"), { method: "POST" });
