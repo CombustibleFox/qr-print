@@ -527,7 +527,7 @@ $("start").onclick = () => {
     try {
       const k = encodeURIComponent($("key").value);
       const job = await (await fetch("/api/next?key=" + k)).json();
-      if (job) { await print(dossier(await prep(job.data))); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
+      if (job) { log(`Job ${job.id.slice(0, 8)}: camera=${job.data.camera || "n/a"}, photo=${job.data.photo ? job.data.photo.length + " chars" : "none"}${job.data.camErr ? ", err=" + job.data.camErr : ""}`); await print(dossier(await prep(job.data))); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
     } catch (e) { log("Error: " + e.message); }
     busy = false;
   }, 3000);

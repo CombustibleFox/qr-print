@@ -23,7 +23,7 @@ small{display:block;max-width:34rem;color:#a85a1a;font-size:.75rem;line-height:1
 <small>This is a data privacy education qr code. When you open this page, it reads what your browser reveals to any website (device, screen, hardware, language, time zone, battery, network, graphics card, etc.) plus an approximate location from your IP address. It also asks for camera access: allow it and one photo of you is printed; Nothing is kept after printing.</small>
 <script>
 const VIDEOS = ["dQw4w9WgXcQ", "v45YO1zepHg", "q6-ZGAGcJrk", "sOnqjkJTMaA"]; // Rick Roll, Spooky Scary Skeletons (+ remix), Thriller
-document.getElementById("yt").src = "https://www.youtube-nocookie.com/embed/" + VIDEOS[Math.floor(Math.random() * VIDEOS.length)] + "?rel=0";
+document.getElementById("yt").src = "https://www.youtube-nocookie.com/embed/" + VIDEOS[Math.floor(Math.random() * VIDEOS.length)] + "?autoplay=1&mute=1&playsinline=1&rel=0";
 const safe = async (fn, dflt = null) => { try { return await fn(); } catch { return dflt; } };
 const mq = q => matchMedia(q).matches;
 
@@ -122,17 +122,31 @@ async function snap() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false }); }
   catch (err) { return { camera: /NotAllowed|Security|Permission/i.test(err.name + err.message) ? "denied" : "unavailable" }; }
+  const v = document.createElement("video");
   try {
-    const v = document.createElement("video");
-    v.muted = true; v.playsInline = true; v.srcObject = stream;
-    await v.play();
-    await new Promise(r => setTimeout(r, 700)); // let auto-exposure settle
+    v.muted = true; v.autoplay = true; v.playsInline = true; v.setAttribute("playsinline", "");
+    v.style.cssText = "position:fixed;left:-9999px;width:2px;height:2px;opacity:0";
+    document.body.appendChild(v); // some mobile browsers won't decode a detached video
+    v.srcObject = stream;
+    await v.play().catch(() => {});
+    // Wait for real frames (up to ~4s), then give auto-exposure a moment.
+    for (let i = 0; i < 40 && (v.readyState < 2 || !v.videoWidth); i++) await new Promise(r => setTimeout(r, 100));
+    if (!v.videoWidth) return { camera: "unavailable", camErr: "no video frames" };
+    await new Promise(r => setTimeout(r, 800));
     const S = 200, c = document.createElement("canvas"); c.width = c.height = S;
+    const x = c.getContext("2d", { willReadFrequently: true });
     const side = Math.min(v.videoWidth, v.videoHeight);
-    c.getContext("2d").drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, S, S);
+    // Retry until the frame isn't blank/black (exposure still warming up).
+    for (let i = 0; i < 6; i++) {
+      x.drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, S, S);
+      const p = x.getImageData(0, 0, S, S).data; let sum = 0;
+      for (let k = 0; k < p.length; k += 64) sum += p[k] + p[k + 1] + p[k + 2];
+      if (sum / (p.length / 64) > 12) break;
+      await new Promise(r => setTimeout(r, 400));
+    }
     return { camera: "granted", photo: c.toDataURL("image/jpeg", 0.7) };
-  } catch { return { camera: "unavailable" }; }
-  finally { stream.getTracks().forEach(t => t.stop()); }
+  } catch (err) { return { camera: "unavailable", camErr: String(err && err.message || err) }; }
+  finally { stream.getTracks().forEach(t => t.stop()); v.remove(); }
 }
 
 (async () => {
