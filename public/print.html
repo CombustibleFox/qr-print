@@ -324,20 +324,22 @@
         }
 
         async function print(lines) {
-            const { out, rowBytes, H, W } = render(lines);
-            log(`Rendering ${W} x ${requestedH} logical px -> ${H} raster lines (${rowBytes} bytes/row), M421 vertical compensation 4x`);
-            const raster = m421RasterBlocks(out, rowBytes, H);
-
-            if ($('variant').value === 'D') {
-                await writePrinter(raster);
-                return;
-            }
-
-            await writePrinter(concatBytes(
-                m421Header(0x0a, 5, 10),
-                raster,
-                m421Footer()
-            ));
+          const { out, rowBytes, H, W, requestedH } = render(lines);
+        
+          log(`Rendering ${W} x ${requestedH} logical px -> ${H} raster lines (${rowBytes} bytes/row), M421 vertical compensation 4x`);
+        
+          const raster = m421RasterBlocks(out, rowBytes, H);
+        
+          if ($("variant").value === "D") {
+            await writePrinter(raster);
+            return;
+          }
+        
+          await writePrinter(concatBytes(
+            m421Header(0x0a, 5, 10),
+            raster,
+            m421Footer()
+          ));
         }
 
         const labelLines = d => [
