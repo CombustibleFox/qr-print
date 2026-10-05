@@ -431,9 +431,9 @@ function dossier(d) {
     // Greeting
     const where = [d.city, d.region].filter(Boolean).join(", ") || d.country || "somewhere";
     c.font = `bold 38px ${FONT}`;
-    c.fillText(fit(c, "Hello, " + where + "!", IW - 130), M, y + 52);
+    c.fillText("BOO! Gotcha!", M, y + 52);
     c.font = `22px ${FONT}`;
-    c.fillText("We found you. Case #" + (d.fp || "????"), M, y + 84);
+    c.fillText(fit(c, `Caught: ${deviceKind(d)} in ${where}`, IW - 130), M, y + 84);
     pumpkin(c, W - M - 62, y + 56, 36);
     y += 100;
     c.setLineDash([10, 8]); c.lineWidth = 3; c.beginPath(); c.moveTo(M, y); c.lineTo(W - M, y); c.stroke(); c.setLineDash([]);
