@@ -269,7 +269,7 @@ async function print(draw) {
 }
 
 // ---- Dossier label ----------------------------------------------------------
-const FONT = "'Courier New', monospace";
+const FONT = "Menlo, Consolas, 'DejaVu Sans Mono', 'Courier New', monospace";
 
 function parseOS(d) {
   const ua = d.userAgent || "";
@@ -401,6 +401,12 @@ function photoBox(c, d, x, y, S) {
 
 function dossier(d) {
   return (c, W, H) => {
+    // Thermal paper washes out thin strokes: add a thin outline to every piece of text.
+    const fill = c.fillText.bind(c);
+    c.fillText = (t, x, y) => {
+      c.save(); c.strokeStyle = c.fillStyle; c.lineWidth = 1.2; c.lineJoin = "round"; c.setLineDash([]);
+      fill(t, x, y); c.strokeText(t, x, y); c.restore();
+    };
     const M = 28, IW = W - M * 2;
     let y = 0;
 
@@ -465,8 +471,8 @@ function dossier(d) {
     }
 
     // UA line (small)
-    c.font = `16px ${FONT}`;
-    for (const l of wrap(c, d.userAgent || "", IW, 2)) { c.fillText(l, M, y + 16); y += 20; }
+    c.font = `18px ${FONT}`;
+    for (const l of wrap(c, d.userAgent || "", IW, 2)) { c.fillText(l, M, y + 17); y += 22; }
     y += 6;
 
     // Fingerprint meter
