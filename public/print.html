@@ -63,10 +63,16 @@ function render(lines) {
 // ASSUMPTION: ESC/POS-style raster (as on other Phomemo models). Verify on the M421.
 async function print(lines) {
   const { out, rowBytes, H } = render(lines);
-  const hdr = [0x1b, 0x40, 0x1d, 0x76, 0x30, 0x00, rowBytes & 255, rowBytes >> 8, H & 255, H >> 8];
-  const data = new Uint8Array([...hdr, ...out, 0x1b, 0x64, 0x02]);
+  // M110/M220-family job header: speed, density, media type (0x0A = labels with gaps), then raster.
+  const SPEED = 5, DENSITY = 8, MEDIA = 0x0a;
+  const hdr = [0x1b, 0x4e, 0x0d, SPEED, 0x1b, 0x4e, 0x04, DENSITY, 0x1f, 0x11, MEDIA,
+               0x1d, 0x76, 0x30, 0x00, rowBytes & 255, rowBytes >> 8, H & 255, H >> 8];
+  const data = new Uint8Array([...hdr, ...out]);
+  const noResp = chr.properties.writeWithoutResponse;
+  log(`Sending ${data.length} bytes (${noResp ? "no response" : "with response"})`);
   for (let i = 0; i < data.length; i += 128) {
-    await chr.writeValueWithoutResponse(data.slice(i, i + 128));
+    const chunk = data.slice(i, i + 128);
+    if (noResp) await chr.writeValueWithoutResponse(chunk); else await chr.writeValueWithResponse(chunk);
     await new Promise(r => setTimeout(r, 15));
   }
 }
