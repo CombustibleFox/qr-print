@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiosk</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:1.5rem auto;padding:0 1rem}
+input{font:inherit;width:100%;box-sizing:border-box;margin:.2rem 0 .8rem}
+button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6rem;overflow:auto;max-height:40vh}
+</style></head><body>
+<h1>Label kiosk</h1>
+<label>Kiosk key <input id="key" value="change-me"></label>
+<label>BLE service UUID (from nRF Connect) <input id="svc"></label>
+<label>BLE write characteristic UUID <input id="chr"></label>
+<label>Width in pixels (4in at 203 DPI ≈ 832, must be a multiple of 8) <input id="w" value="832"></label>
+<button id="pair">1. Pair printer</button>
+<button id="test">Test print</button>
+<button id="start">2. Start listening</button>
+<p id="status">Not connected.</p>
+<pre id="log"></pre>
+<canvas id="cv" hidden></canvas>
+<script>
+const $ = id => document.getElementById(id);
+const log = s => { $("log").textContent = s + "\n" + $("log").textContent; };
+for (const id of ["key","svc","chr","w"]) {
+  const v = localStorage.getItem("k_" + id); if (v) $(id).value = v;
+  $(id).oninput = () => localStorage.setItem("k_" + id, $(id).value);
+}
+let chr = null;
+
+$("pair").onclick = async () => {
+  try {
+    const svc = $("svc").value.trim().toLowerCase();
+    const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [svc] });
+    const server = await dev.gatt.connect();
+    chr = await (await server.getPrimaryService(svc)).getCharacteristic($("chr").value.trim().toLowerCase());
+    $("status").textContent = "Paired with " + dev.name;
+  } catch (e) { $("status").textContent = "Pair failed: " + e.message; }
+};
+
+// Render text lines to a 1-bit bitmap.
+function render(lines) {
+  const W = +$("w").value, H = 640, cv = $("cv");
+  cv.width = W; cv.height = H;
+  const c = cv.getContext("2d");
+  c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
+  c.fillStyle = "#000"; c.font = "bold 40px sans-serif";
+  let y = 60;
+  for (const l of lines) {
+    c.font = (y === 60 ? "bold 52px" : "34px") + " sans-serif";
+    // wrap long lines
+    let line = "";
+    for (const word of l.split(" ")) {
+      if (c.measureText(line + word).width > W - 60) { c.fillText(line, 30, y); y += 44; line = ""; }
+      line += word + " ";
+    }
+    c.fillText(line, 30, y); y += 48;
+  }
+  const px = c.getImageData(0, 0, W, H).data, rowBytes = W / 8, out = new Uint8Array(rowBytes * H);
+  for (let i = 0; i < W * H; i++) if (px[i * 4] < 128) out[i >> 3] |= 0x80 >> (i & 7);
+  return { out, rowBytes, H };
+}
+
+// ASSUMPTION: ESC/POS-style raster (as on other Phomemo models). Verify on the M421.
+async function print(lines) {
+  const { out, rowBytes, H } = render(lines);
+  const hdr = [0x1b, 0x40, 0x1d, 0x76, 0x30, 0x00, rowBytes & 255, rowBytes >> 8, H & 255, H >> 8];
+  const data = new Uint8Array([...hdr, ...out, 0x1b, 0x64, 0x02]);
+  for (let i = 0; i < data.length; i += 128) {
+    await chr.writeValueWithoutResponse(data.slice(i, i + 128));
+    await new Promise(r => setTimeout(r, 15));
+  }
+}
+
+const labelLines = d => [
+  "Device label", d.platform + " · " + d.screen + " @" + d.dpr + "x",
+  d.language + " · " + d.timezone, (d.city || "?") + ", " + (d.country || "?") + "  " + d.ip,
+  d.userAgent, d.time,
+];
+
+$("test").onclick = () => chr ? print(["Test print", "Hello from the kiosk"]).catch(e => log(e.message)) : log("Pair first.");
+
+$("start").onclick = () => {
+  if (!chr) return log("Pair first.");
+  $("status").textContent = "Listening...";
+  let busy = false;
+  setInterval(async () => {
+    if (busy) return; busy = true;
+    try {
+      const k = encodeURIComponent($("key").value);
+      const job = await (await fetch("/api/next?key=" + k)).json();
+      if (job) { await print(labelLines(job.data)); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
+    } catch (e) { log("Error: " + e.message); }
+    busy = false;
+  }, 3000);
+};
+</script></body></html>

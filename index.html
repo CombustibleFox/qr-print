@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Print my device label</title>
+<style>
+body{font:18px/1.5 system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:0 1.25rem}
+button{font:inherit;padding:.8rem 1.4rem;border:0;border-radius:.5rem;background:#1a1a1a;color:#fff}
+button:disabled{opacity:.5}small{color:#666}
+</style></head><body>
+<h1>Get your device label</h1>
+<p>Tap the button and a label with your device details will print at the desk.</p>
+<p><small>We send your browser details (device type, screen size, language, time zone) and your approximate location from your IP address. Nothing else.</small></p>
+<button id="go">Print my label</button>
+<p id="msg" role="status"></p>
+<script>
+document.getElementById("go").onclick = async (e) => {
+  e.target.disabled = true;
+  const info = {
+    userAgent: navigator.userAgent, platform: navigator.platform,
+    screen: `${screen.width}x${screen.height}`, dpr: devicePixelRatio,
+    language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    touch: navigator.maxTouchPoints, dark: matchMedia("(prefers-color-scheme: dark)").matches,
+  };
+  try {
+    const r = await fetch("/api/submit", { method: "POST", body: JSON.stringify(info) });
+    msg.textContent = r.ok ? "Sent. Your label is printing." : "Something went wrong. Try again.";
+  } catch { msg.textContent = "No connection. Try again."; e.target.disabled = false; }
+};
+</script></body></html>
