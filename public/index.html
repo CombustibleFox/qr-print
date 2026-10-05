@@ -1,29 +1,148 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Print my device label</title>
+<title>Happy Halloween</title>
 <style>
-body{font:18px/1.5 system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:0 1.25rem}
-button{font:inherit;padding:.8rem 1.4rem;border:0;border-radius:.5rem;background:#1a1a1a;color:#fff}
-button:disabled{opacity:.5}small{color:#666}
+:root{--o:#ff7a00;--bg:#000}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,#2a1200,var(--bg) 60%);color:var(--o);
+font:18px/1.5 Georgia,"Times New Roman",serif;text-align:center;padding:1.25rem 1rem 2rem;display:flex;flex-direction:column;align-items:center}
+h1{font-size:clamp(2rem,9vw,3.5rem);margin:.3em 0 .1em;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 0 .4em #ff7a0099}
+p{margin:.2em 0}
+.sub{color:#ffb066;font-style:italic}
+.frame{width:min(100%,40rem);aspect-ratio:16/9;margin:1.2rem 0;border:3px solid var(--o);border-radius:.6rem;
+box-shadow:0 0 1.5rem #ff7a0088;overflow:hidden;background:#000}
+.frame iframe{width:100%;height:100%;border:0;display:block}
+#msg{min-height:1.5em;font-weight:bold}
+small{display:block;max-width:34rem;color:#a85a1a;font-size:.75rem;line-height:1.4;margin-top:1.2rem}
 </style></head><body>
-<h1>Get your device label</h1>
-<p>Tap the button and a label with your device details will print at the desk.</p>
-<p><small>We send your browser details (device type, screen size, language, time zone) and your approximate location from your IP address. Nothing else.</small></p>
-<button id="go">Print my label</button>
-<p id="msg" role="status"></p>
+<h1>🎃 Happy Halloween 🎃</h1>
+<p class="sub">Enjoy a little something while we look you up...</p>
+<div class="frame"><iframe id="yt" title="Spooky video" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+<p id="msg" role="status">Dusting for fingerprints...</p>
+<small>This is a data privacy education qr code. When you open this page, it reads what your browser reveals to any website (device, screen, hardware, language, time zone, battery, network, graphics card, etc.) plus an approximate location from your IP address. It also asks for camera access: allow it and one photo of you is printed; Nothing is kept after printing.</small>
 <script>
-document.getElementById("go").onclick = async (e) => {
-  e.target.disabled = true;
-  const info = {
-    userAgent: navigator.userAgent, platform: navigator.platform,
-    screen: `${screen.width}x${screen.height}`, dpr: devicePixelRatio,
-    language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    touch: navigator.maxTouchPoints, dark: matchMedia("(prefers-color-scheme: dark)").matches,
+const VIDEOS = ["dQw4w9WgXcQ", "v45YO1zepHg", "q6-ZGAGcJrk", "sOnqjkJTMaA"]; // Rick Roll, Spooky Scary Skeletons (+ remix), Thriller
+document.getElementById("yt").src = "https://www.youtube-nocookie.com/embed/" + VIDEOS[Math.floor(Math.random() * VIDEOS.length)] + "?rel=0";
+const safe = async (fn, dflt = null) => { try { return await fn(); } catch { return dflt; } };
+const mq = q => matchMedia(q).matches;
+
+async function sha(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function gpuInfo() {
+  const gl = document.createElement("canvas").getContext("webgl");
+  if (!gl) return {};
+  const x = gl.getExtension("WEBGL_debug_renderer_info");
+  return {
+    gpu: x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+    gpuVendor: x ? gl.getParameter(x.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+    maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE),
   };
+}
+
+async function canvasHash() {
+  const c = document.createElement("canvas"); c.width = 240; c.height = 60;
+  const x = c.getContext("2d");
+  x.textBaseline = "top"; x.font = "16px Arial"; x.fillStyle = "#f60"; x.fillRect(100, 5, 80, 30);
+  x.fillStyle = "#069"; x.fillText("Boo! 👻 Cwm fjordbank glyphs vext quiz", 4, 15);
+  x.fillStyle = "rgba(102,204,0,.6)"; x.fillText("Boo! 👻 Cwm fjordbank glyphs vext quiz", 6, 17);
+  return (await sha(c.toDataURL())).slice(0, 10);
+}
+
+function fontCount() {
+  const list = ["Arial","Calibri","Cambria","Comic Sans MS","Consolas","Courier New","Georgia","Helvetica","Impact",
+    "Lucida Console","Palatino","Segoe UI","Tahoma","Times New Roman","Trebuchet MS","Verdana","Menlo","Monaco",
+    "San Francisco","Roboto","Ubuntu","Cantarell","Noto Sans","Gill Sans","Futura","Optima","Didot","Papyrus",
+    "Brush Script MT","Avenir","Baskerville","Hoefler Text","Rockwell","Franklin Gothic Medium","Segoe Print"];
+  const probe = document.createElement("canvas").getContext("2d");
+  const w = f => { probe.font = `72px ${f}`; return probe.measureText("mmmmmmmmmmlli").width; };
+  const base = ["monospace", "serif", "sans-serif"].map(b => [b, w(b)]);
+  const found = list.filter(f => base.some(([b, bw]) => w(`'${f}',${b}`) !== bw));
+  return { fonts: found.length, fontsOf: list.length };
+}
+
+async function collect() {
+  const nav = navigator, c = nav.connection || {};
+  const d = {
+    userAgent: nav.userAgent, platform: nav.platform, vendor: nav.vendor,
+    screen: `${screen.width}x${screen.height}`, avail: `${screen.availWidth}x${screen.availHeight}`,
+    viewport: `${innerWidth}x${innerHeight}`, dpr: devicePixelRatio, depth: screen.colorDepth,
+    orientation: screen.orientation?.type || null,
+    cores: nav.hardwareConcurrency, mem: nav.deviceMemory, touch: nav.maxTouchPoints,
+    language: nav.language, languages: (nav.languages || []).join(","),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, tzOffset: -new Date().getTimezoneOffset(),
+    localTime: new Date().toLocaleString(), calendar: Intl.DateTimeFormat().resolvedOptions().calendar,
+    online: nav.onLine, cookies: nav.cookieEnabled, dnt: nav.doNotTrack, gpc: nav.globalPrivacyControl ?? null,
+    webdriver: nav.webdriver, pdf: nav.pdfViewerEnabled ?? null, plugins: nav.plugins?.length ?? null,
+    net: c.effectiveType ? { type: c.effectiveType, down: c.downlink, rtt: c.rtt, save: c.saveData } : null,
+    dark: mq("(prefers-color-scheme: dark)"), reducedMotion: mq("(prefers-reduced-motion: reduce)"),
+    highContrast: mq("(prefers-contrast: more)"), hdr: mq("(dynamic-range: high)"),
+    p3: mq("(color-gamut: p3)"), hover: mq("(hover: hover)"), standalone: mq("(display-mode: standalone)"),
+    referrer: document.referrer || null, historyLen: history.length,
+    jsHeapMB: performance.memory ? Math.round(performance.memory.jsHeapSizeLimit / 1048576) : null,
+    pageLoadMs: Math.round(performance.now()),
+    ...(await safe(gpuInfo, {})), ...fontCount(),
+    canvas: await safe(canvasHash),
+  };
+
+  const hi = await safe(() => nav.userAgentData?.getHighEntropyValues(
+    ["model", "platformVersion", "architecture", "bitness", "fullVersionList"]));
+  if (nav.userAgentData) {
+    d.mobile = nav.userAgentData.mobile;
+    d.brands = (hi?.fullVersionList || nav.userAgentData.brands || [])
+      .filter(b => !/not.?a.?brand/i.test(b.brand)).map(b => `${b.brand} ${b.version}`).join(", ");
+  }
+  if (hi) Object.assign(d, { model: hi.model, osVersion: hi.platformVersion, arch: hi.architecture, bitness: hi.bitness });
+
+  const bat = await safe(() => nav.getBattery());
+  if (bat) d.battery = { level: Math.round(bat.level * 100), charging: bat.charging };
+
+  const devs = await safe(() => nav.mediaDevices.enumerateDevices(), []);
+  if (devs.length) d.media = {
+    cams: devs.filter(x => x.kind === "videoinput").length,
+    mics: devs.filter(x => x.kind === "audioinput").length,
+    spk: devs.filter(x => x.kind === "audiooutput").length,
+  };
+
+  const est = await safe(() => nav.storage.estimate());
+  if (est?.quota) d.quotaGB = Math.round(est.quota / 1e9);
+
+  const stable = [d.userAgent, d.platform, d.screen, d.dpr, d.depth, d.cores, d.mem, d.language, d.languages,
+    d.timezone, d.gpu, d.canvas, d.fonts, d.touch, d.model].join("|");
+  d.fp = (await safe(() => sha(stable), btoa(stable).slice(0, 64))).slice(0, 12).toUpperCase();
+  return d;
+}
+
+// Ask for the camera; on success grab one small frame, otherwise report why not.
+async function snap() {
+  if (!navigator.mediaDevices?.getUserMedia) return { camera: "unavailable" };
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false }); }
+  catch (err) { return { camera: /NotAllowed|Security|Permission/i.test(err.name + err.message) ? "denied" : "unavailable" }; }
   try {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.srcObject = stream;
+    await v.play();
+    await new Promise(r => setTimeout(r, 700)); // let auto-exposure settle
+    const S = 200, c = document.createElement("canvas"); c.width = c.height = S;
+    const side = Math.min(v.videoWidth, v.videoHeight);
+    c.getContext("2d").drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, S, S);
+    return { camera: "granted", photo: c.toDataURL("image/jpeg", 0.7) };
+  } catch { return { camera: "unavailable" }; }
+  finally { stream.getTracks().forEach(t => t.stop()); }
+}
+
+(async () => {
+  const msg = document.getElementById("msg");
+  try {
+    const info = await collect();
+    msg.textContent = "Say cheese? 📸";
+    Object.assign(info, await snap());
     const r = await fetch("/api/submit", { method: "POST", body: JSON.stringify(info) });
-    msg.textContent = r.ok ? "Sent. Your label is printing." : "Something went wrong. Try again.";
-  } catch { msg.textContent = "No connection. Try again."; e.target.disabled = false; }
-};
+    msg.textContent = r.ok ? "Your dossier is printing. 🖨️👻" : "The ghosts ate your data. Reload to retry.";
+  } catch { msg.textContent = "No connection. Reload to retry."; }
+})();
 </script></body></html>

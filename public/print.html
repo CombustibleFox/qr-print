@@ -166,8 +166,8 @@ $("pair").onclick = async () => {
   }
 };
 
-// Render text lines to a 1-bit bitmap.
-function render(lines) {
+// Draw onto a canvas via draw(ctx, W, H), then pack to a 1-bit bitmap.
+function render(draw) {
   let W = Math.max(8, Math.floor(+$('w').value));
   W -= W % 8;
   const H = Math.max(8, Math.floor(+$('h').value));
@@ -179,29 +179,9 @@ function render(lines) {
   c.fillStyle = '#fff';
   c.fillRect(0, 0, W, H);
   c.fillStyle = '#000';
+  c.strokeStyle = '#000';
   c.textBaseline = 'alphabetic';
-
-  let y = 60;
-  for (const l of lines) {
-    c.font = (y === 60 ? 'bold 52px' : '34px') + ' sans-serif';
-    let line = '';
-
-    for (const word of String(l).split(' ')) {
-      const candidate = line ? line + word : word;
-      if (c.measureText(candidate).width > W - 60 && line) {
-        c.fillText(line, 30, y);
-        y += 44;
-        line = '';
-      }
-      line += word + ' ';
-    }
-
-    if (y < H - 10) {
-      c.fillText(line, 30, y);
-      y += 48;
-    }
-    if (y >= H - 10) break;
-  }
+  draw(c, W, H);
 
   const px = c.getImageData(0, 0, W, H).data;
   const rowBytes = W / 8;
@@ -274,8 +254,8 @@ async function writePrinter(data) {
   }
 }
 
-async function print(lines) {
-  const { out, rowBytes, H, W } = render(lines);
+async function print(draw) {
+  const { out, rowBytes, H, W } = render(draw);
   log(`Rendering ${W} x ${H} pixels (${rowBytes} bytes/row)`);
   const raster = m421RasterBlocks(out, rowBytes, H);
 
@@ -291,13 +271,255 @@ async function print(lines) {
   ));
 }
 
-const labelLines = d => [
-  "Device label", d.platform + " · " + d.screen + " @" + d.dpr + "x",
-  d.language + " · " + d.timezone, (d.city || "?") + ", " + (d.country || "?") + "  " + d.ip,
-  d.userAgent, d.time,
-];
+// ---- Dossier label ----------------------------------------------------------
+const FONT = "'Courier New', monospace";
 
-$("test").onclick = () => chr ? print(["Test print", "Hello from the kiosk"]).catch(e => log(e.message)) : log("Pair first.");
+function parseOS(d) {
+  const ua = d.userAgent || "";
+  if (/iPhone|iPad|iPod/.test(ua)) return "iOS " + ((ua.match(/OS (\d+[_\d]*)/) || [])[1] || "").replace(/_/g, ".");
+  if (/Android/.test(ua)) return "Android " + ((ua.match(/Android ([\d.]+)/) || [])[1] || "");
+  if (/Windows/.test(ua)) return d.osVersion && parseInt(d.osVersion) >= 13 ? "Windows 11" : "Windows 10/11";
+  if (/Mac OS X/.test(ua)) return "macOS " + ((ua.match(/Mac OS X ([\d_]+)/) || [])[1] || "").replace(/_/g, ".");
+  if (/CrOS/.test(ua)) return "ChromeOS";
+  if (/Linux/.test(ua)) return "Linux";
+  return d.platform || "Unknown OS";
+}
+function parseBrowser(d) {
+  const ua = d.userAgent || "";
+  const m = ua.match(/(Edg|OPR|SamsungBrowser|Firefox|FxiOS|CriOS|Chrome|Version)\/([\d.]+)/);
+  const name = !m ? "Browser" : { Edg: "Edge", OPR: "Opera", FxiOS: "Firefox", CriOS: "Chrome", Version: "Safari" }[m[1]] || m[1];
+  return name + (m ? " " + m[2].split(".")[0] : "");
+}
+function deviceKind(d) {
+  const ua = d.userAgent || "";
+  if (d.model) return d.model;
+  if (/iPhone/.test(ua)) return "iPhone";
+  if (/iPad/.test(ua)) return "iPad";
+  if (/Android/.test(ua)) return /Mobile/.test(ua) ? "Android phone" : "Android tablet";
+  return d.touch > 0 ? "Touchscreen computer" : "Computer";
+}
+
+// Playful, vibes-based "how identifiable are you" number.
+function uniqueness(d) {
+  let bits = 6; // user agent
+  if (d.screen) bits += 3; if (d.dpr) bits += 1.5; if (d.timezone) bits += 3; if (d.languages) bits += 2;
+  if (d.gpu) bits += 5; if (d.canvas) bits += 6; if (d.fonts) bits += 3; if (d.cores) bits += 2;
+  if (d.mem) bits += 1.5; if (d.model) bits += 4; if (d.battery) bits += 3; if (d.media) bits += 2;
+  if (d.quotaGB) bits += 2; if (d.brands) bits += 2;
+  return Math.min(bits, 33);
+}
+function fmtOneIn(bits) {
+  const n = Math.pow(2, bits);
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + " billion";
+  return n >= 1e6 ? (n / 1e6).toFixed(1) + " million" : Math.round(n).toLocaleString();
+}
+function roast(d) {
+  const picks = [];
+  if (d.battery && d.battery.level < 20 && !d.battery.charging) picks.push("Battery at " + d.battery.level + "%. Living dangerously.");
+  if (d.battery && d.battery.charging) picks.push("Plugged in. Respect.");
+  if (d.dark) picks.push("Dark mode on. A true creature of the night.");
+  if (d.cores >= 12) picks.push(d.cores + " CPU cores. Overkill for scrolling.");
+  if (d.media && d.media.cams > 1) picks.push(d.media.cams + " cameras. Smile!");
+  if (d.dnt === "1" || d.gpc) picks.push("Do Not Track? We tracked it anyway.");
+  if (d.webdriver) picks.push("Are you a robot? Suspicious.");
+  if (d.reducedMotion) picks.push("Reduced motion: no spooky animations for you.");
+  if (d.net && d.net.type === "4g") picks.push("Decent signal. Can't hide.");
+  picks.push("I know what you scrolled last summer.");
+  return picks[Math.floor(Math.random() * Math.min(picks.length, 3))];
+}
+
+function fit(c, text, maxW) {
+  text = String(text);
+  if (c.measureText(text).width <= maxW) return text;
+  while (text.length > 1 && c.measureText(text + "…").width > maxW) text = text.slice(0, -1);
+  return text + "…";
+}
+function wrap(c, text, maxW, maxLines) {
+  const lines = []; let line = "";
+  for (const word of String(text).split(/(?<=[ ,;/])/)) {
+    if (line && c.measureText(line + word).width > maxW) { lines.push(line.trimEnd()); line = ""; }
+    line += word;
+  }
+  lines.push(line.trimEnd());
+  if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = fit(c, lines[maxLines - 1] + "…", maxW); }
+  return lines;
+}
+
+function pumpkin(c, cx, cy, r) {
+  c.save();
+  c.fillStyle = "#000";
+  c.beginPath(); c.ellipse(cx, cy, r * 1.15, r, 0, 0, Math.PI * 2); c.fill();
+  c.fillRect(cx - r * .1, cy - r * 1.25, r * .2, r * .35); // stem
+  c.fillStyle = "#fff";
+  const tri = (x, y, s) => { c.beginPath(); c.moveTo(x, y - s); c.lineTo(x - s, y + s); c.lineTo(x + s, y + s); c.closePath(); c.fill(); };
+  tri(cx - r * .45, cy - r * .15, r * .22); tri(cx + r * .45, cy - r * .15, r * .22);
+  c.beginPath(); c.moveTo(cx - r * .7, cy + r * .3);
+  for (let i = 0; i <= 6; i++) c.lineTo(cx - r * .7 + i * r * .2333, cy + r * (i % 2 ? .3 : .65));
+  c.lineTo(cx + r * .7, cy + r * .3); c.closePath(); c.fill();
+  c.restore();
+}
+
+function barcode(c, x, y, w, h, seed) {
+  // Decorative bars driven by the fingerprint hash.
+  let bits = "";
+  for (const ch of seed) bits += parseInt(ch, 16).toString(2).padStart(4, "0");
+  bits = (bits + bits + bits + bits).slice(0, 96);
+  const bw = w / (bits.length * 1.5);
+  let cx = x;
+  for (let i = 0; i < bits.length; i++) {
+    const t = (bits[i] === "1" ? 2 : 1) * bw;
+    c.fillRect(cx, y, t, h);
+    cx += t + bw * 0.6;
+    if (cx > x + w) break;
+  }
+}
+
+// Load the selfie (if any) so the synchronous draw function can use it.
+async function prep(d) {
+  if (!d.photo) return d;
+  d._img = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = d.photo; });
+  return d;
+}
+
+// Draw the image as a high-contrast Floyd-Steinberg dithered square (thermal printers only do 1-bit).
+function ditherPhoto(c, img, x, y, S) {
+  const t = document.createElement("canvas"); t.width = t.height = S;
+  const tc = t.getContext("2d", { willReadFrequently: true });
+  tc.drawImage(img, 0, 0, S, S);
+  const im = tc.getImageData(0, 0, S, S), p = im.data, g = new Float32Array(S * S);
+  let lo = 255, hi = 0;
+  for (let i = 0; i < S * S; i++) { g[i] = .299 * p[i * 4] + .587 * p[i * 4 + 1] + .114 * p[i * 4 + 2]; lo = Math.min(lo, g[i]); hi = Math.max(hi, g[i]); }
+  const k = 255 / Math.max(1, hi - lo);
+  for (let i = 0; i < S * S; i++) g[i] = (g[i] - lo) * k;
+  for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++) {
+    const i = yy * S + xx, o = g[i], n = o < 128 ? 0 : 255, e = o - n;
+    g[i] = n;
+    if (xx + 1 < S) g[i + 1] += e * 7 / 16;
+    if (yy + 1 < S) { if (xx > 0) g[i + S - 1] += e * 3 / 16; g[i + S] += e * 5 / 16; if (xx + 1 < S) g[i + S + 1] += e / 16; }
+  }
+  for (let i = 0; i < S * S; i++) { p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = g[i]; p[i * 4 + 3] = 255; }
+  tc.putImageData(im, 0, 0);
+  c.drawImage(t, x, y);
+}
+
+function photoBox(c, d, x, y, S) {
+  c.lineWidth = 4; c.strokeRect(x, y, S, S);
+  if (d._img) { ditherPhoto(c, d._img, x + 4, y + 4, S - 8); return; }
+  c.textAlign = "center";
+  const cx = x + S / 2;
+  c.font = `bold 18px ${FONT}`;
+  const head = d.camera === "denied" ? "CAMERA DENIED" : "NO CAMERA";
+  c.fillText(head, cx, y + 38);
+  c.setLineDash([6, 5]); c.lineWidth = 2; c.beginPath(); c.moveTo(x + 10, y + 50); c.lineTo(x + S - 10, y + 50); c.stroke(); c.setLineDash([]);
+  c.font = `18px ${FONT}`;
+  const msg = d.camera === "denied" ? "Smart move. Nobody gets your face." : "No photo. Your face lives on.";
+  let ly = y + 78;
+  for (const l of wrap(c, msg, S - 20, 5)) { c.fillText(l, cx, ly); ly += 22; }
+  c.textAlign = "left";
+}
+
+function dossier(d) {
+  return (c, W, H) => {
+    const M = 28, IW = W - M * 2;
+    let y = 0;
+
+    // Banner
+    c.fillRect(0, 0, W, 112);
+    c.fillStyle = "#fff"; c.textAlign = "center";
+    c.font = `bold 56px ${FONT}`; c.fillText("DEVICE DOSSIER", W / 2, 58);
+    c.font = `bold 24px ${FONT}`; c.fillText("TOP SECRET  *  EYES ONLY  *  BOO", W / 2, 94);
+    c.fillStyle = "#000"; c.textAlign = "left";
+    y = 112;
+
+    // Greeting
+    const where = [d.city, d.region].filter(Boolean).join(", ") || d.country || "somewhere";
+    c.font = `bold 38px ${FONT}`;
+    c.fillText(fit(c, "Hello, " + where + "!", IW - 130), M, y + 52);
+    c.font = `22px ${FONT}`;
+    c.fillText("We found you. Case #" + (d.fp || "????"), M, y + 84);
+    pumpkin(c, W - M - 62, y + 56, 36);
+    y += 100;
+    c.setLineDash([10, 8]); c.lineWidth = 3; c.beginPath(); c.moveTo(M, y); c.lineTo(W - M, y); c.stroke(); c.setLineDash([]);
+    y += 8;
+
+    const geo = d.lat != null ? `${(+d.lat).toFixed(2)}, ${(+d.lon).toFixed(2)}` : null;
+    const b = d.battery ? `${d.battery.level}%${d.battery.charging ? " (charging)" : ""}` : null;
+    const net = d.net ? `${d.net.type} ${d.net.down || "?"}Mbps ${d.net.rtt || "?"}ms` : null;
+    const hw = [d.media && `${d.media.cams} cam`, d.media && `${d.media.mics} mic`, d.touch ? `${d.touch}-touch` : null].filter(Boolean).join(" ");
+    const sections = [
+      ["WHO YOU ARE", [
+        ["Device", deviceKind(d)], ["OS", parseOS(d) + (d.arch ? ` ${d.arch}${d.bitness || ""}` : "")],
+        ["Browser", parseBrowser(d) + (d.dark ? ", dark mode" : "")], ["Language", d.languages || d.language],
+      ]],
+      ["WHERE YOU ARE", [
+        ["IP", d.ip], ["City", [d.city, d.region, d.postal].filter(Boolean).join(" ")],
+        ["Country", [d.country, d.continent].filter(Boolean).join(" / ")], ["Lat/Lon", geo],
+        ["ISP", d.isp ? `${d.isp}${d.asn ? " AS" + d.asn : ""}` : null],
+        ["Timezone", `${d.timezone} (UTC${d.tzOffset >= 0 ? "+" : ""}${d.tzOffset / 60})`],
+      ]],
+      ["WHAT YOU'RE CARRYING", [
+        ["Screen", `${d.screen} @${d.dpr}x, view ${d.viewport}`],
+        ["CPU/RAM", `${d.cores || "?"} cores / ${d.mem ? d.mem + "GB+" : "?"}`],
+        ["GPU", d.gpu], ["Battery", b], ["Network", net], ["Sensors", hw],
+        ["Storage", d.quotaGB ? d.quotaGB + " GB quota" : null],
+        ["Fonts", d.fonts != null ? `${d.fonts}/${d.fontsOf} common installed` : null],
+      ]],
+    ];
+
+    const LH = 31, KEY_W = 140;
+    const PH = 170; // photo box size
+    for (const [i, [title, rows]] of sections.entries()) {
+      const rightW = i === 0 ? PH + 16 : 0;
+      const sectionTop = y;
+      if (i === 0) photoBox(c, d, W - M - PH, y + 4, PH);
+      const live = rows.filter(r => r[1] != null && r[1] !== "" && r[1] !== "undefined");
+      if (!live.length) continue;
+      c.font = `bold 24px ${FONT}`; c.fillText("[" + title + "]", M, y + 24); y += 32;
+      for (const [k, v] of live) {
+        c.font = `bold 22px ${FONT}`; c.fillText(k, M, y + 20);
+        c.font = `22px ${FONT}`;
+        const ls = wrap(c, v, IW - KEY_W - rightW, 2);
+        for (const l of ls) { c.fillText(l, M + KEY_W, y + 20); y += LH; }
+        if (!ls.length) y += LH;
+      }
+      if (i === 0) y = Math.max(y, sectionTop + PH + 4);
+      y += 4;
+    }
+
+    // UA line (small)
+    c.font = `16px ${FONT}`;
+    for (const l of wrap(c, d.userAgent || "", IW, 2)) { c.fillText(l, M, y + 16); y += 20; }
+    y += 6;
+
+    // Fingerprint meter
+    const bits = uniqueness(d);
+    c.setLineDash([10, 8]); c.lineWidth = 3; c.beginPath(); c.moveTo(M, y); c.lineTo(W - M, y); c.stroke(); c.setLineDash([]);
+    y += 32;
+    c.font = `bold 26px ${FONT}`; c.fillText("UNIQUENESS: 1 in " + fmtOneIn(bits), M, y);
+    y += 12;
+    c.lineWidth = 4; c.strokeRect(M, y, IW, 26);
+    c.fillRect(M + 4, y + 4, (IW - 8) * Math.min(1, bits / 38), 18);
+    y += 54;
+    c.font = `italic 22px ${FONT}`;
+    for (const l of wrap(c, roast(d), IW, 2)) { c.fillText(l, M, y); y += 26; }
+
+    // Footer: barcode + fingerprint
+    const fy = Math.max(y + 8, H - 128);
+    barcode(c, M, fy, IW, 56, d.fp || "0000");
+    c.textAlign = "center";
+    c.font = `bold 28px ${FONT}`; c.fillText("FP-" + (d.fp || "????") + "  " + (d.canvas || "").toUpperCase(), W / 2, fy + 86);
+    c.font = `20px ${FONT}`;
+    c.fillText("Happy Halloween! " + new Date(d.time || Date.now()).toLocaleString(), W / 2, fy + 114);
+    c.textAlign = "left";
+  };
+}
+
+const testLabel = (c, W, H) => {
+  c.font = "bold 52px sans-serif"; c.fillText("Test print", 30, 60);
+  c.font = "34px sans-serif"; c.fillText("Hello from the kiosk", 30, 108);
+};
+
+$("test").onclick = () => chr ? print(testLabel).catch(e => log(e.message)) : log("Pair first.");
 
 $("start").onclick = () => {
   if (!chr) return log("Pair first.");
@@ -308,7 +530,7 @@ $("start").onclick = () => {
     try {
       const k = encodeURIComponent($("key").value);
       const job = await (await fetch("/api/next?key=" + k)).json();
-      if (job) { await print(labelLines(job.data)); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
+      if (job) { await print(dossier(await prep(job.data))); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
     } catch (e) { log("Error: " + e.message); }
     busy = false;
   }, 3000);

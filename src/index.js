@@ -6,9 +6,17 @@ export default {
     const url = new URL(req.url);
     const q = env.QUEUE.get(env.QUEUE.idFromName("main"));
     if (url.pathname === "/api/submit" && req.method === "POST") {
-      const info = await req.json();
+      const body = await req.text();
+      if (body.length > 60000) return new Response("too large", { status: 413 });
+      let info;
+      try { info = JSON.parse(body); } catch { return new Response("bad json", { status: 400 }); }
+      if (!info || typeof info !== "object" || Array.isArray(info)) return new Response("bad json", { status: 400 });
+      const cf = req.cf || {};
       info.ip = req.headers.get("CF-Connecting-IP");
-      info.city = req.cf?.city; info.country = req.cf?.country;
+      info.city = cf.city; info.region = cf.region; info.country = cf.country; info.continent = cf.continent;
+      info.postal = cf.postalCode; info.lat = cf.latitude; info.lon = cf.longitude; info.ipTimezone = cf.timezone;
+      info.asn = cf.asn; info.isp = cf.asOrganization; info.colo = cf.colo;
+      info.http = cf.httpProtocol; info.tls = cf.tlsVersion;
       info.time = new Date().toISOString();
       return q.fetch("https://q/push", { method: "POST", body: JSON.stringify(info) });
     }
@@ -24,15 +32,21 @@ export class Queue {
   constructor(state) { this.state = state; }
   async fetch(req) {
     const p = new URL(req.url);
-    const items = (await this.state.storage.get("items")) || [];
+    // One storage key per job (photos make a single array exceed the 128 KiB value limit).
+    const st = this.state.storage;
     if (p.pathname === "/push") {
-      items.push({ id: crypto.randomUUID(), data: await req.json() });
-      await this.state.storage.put("items", items.slice(-100));
+      const id = "i:" + Date.now().toString().padStart(15, "0") + crypto.randomUUID().slice(0, 8);
+      await st.put(id, await req.json());
+      const keys = [...(await st.list({ prefix: "i:" })).keys()];
+      if (keys.length > 100) await st.delete(keys.slice(0, keys.length - 100));
       return new Response("ok");
     }
-    if (p.pathname === "/next") return Response.json(items[0] || null);
+    if (p.pathname === "/next") {
+      const [first] = [...(await st.list({ prefix: "i:", limit: 1 })).entries()];
+      return Response.json(first ? { id: first[0], data: first[1] } : null);
+    }
     if (p.pathname === "/ack") {
-      await this.state.storage.put("items", items.filter(i => i.id !== p.searchParams.get("id")));
+      await st.delete(p.searchParams.get("id"));
       return new Response("ok");
     }
   }
