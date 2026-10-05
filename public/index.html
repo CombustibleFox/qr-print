@@ -23,7 +23,7 @@ small{display:block;max-width:34rem;color:#a85a1a;font-size:.75rem;line-height:1
 <small>This is a data privacy education qr code. When you open this page, it reads what your browser reveals to any website (device, screen, hardware, language, time zone, battery, network, graphics card, etc.) plus an approximate location from your IP address. It also asks for camera access: allow it and one photo of you is printed; Nothing is kept after printing.</small>
 <script>
 const VIDEOS = ["dQw4w9WgXcQ", "v45YO1zepHg", "q6-ZGAGcJrk", "sOnqjkJTMaA"]; // Rick Roll, Spooky Scary Skeletons (+ remix), Thriller
-document.getElementById("yt").src = "https://www.youtube-nocookie.com/embed/" + VIDEOS[Math.floor(Math.random() * VIDEOS.length)] + "?autoplay=1&mute=1&playsinline=1&rel=0";
+document.getElementById("yt").src = "https://www.youtube-nocookie.com/embed/" + VIDEOS[Math.floor(Math.random() * VIDEOS.length)] + "?autoplay=1&playsinline=1&rel=0";
 const safe = async (fn, dflt = null) => { try { return await fn(); } catch { return dflt; } };
 const mq = q => matchMedia(q).matches;
 
@@ -64,6 +64,16 @@ function fontCount() {
   return { fonts: found.length, fontsOf: list.length };
 }
 
+async function refreshRate() {
+  const common = [30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240];
+  const hz = await new Promise(res => {
+    let n = 0, t0 = 0;
+    const f = t => { if (!t0) t0 = t; if (++n >= 30) res(1000 / ((t - t0) / (n - 1))); else requestAnimationFrame(f); };
+    requestAnimationFrame(f); setTimeout(() => res(null), 1500); // background tabs throttle rAF
+  });
+  return hz ? common.reduce((a, b) => Math.abs(b - hz) < Math.abs(a - hz) ? b : a) : null;
+}
+
 async function collect() {
   const nav = navigator, c = nav.connection || {};
   const d = {
@@ -86,6 +96,7 @@ async function collect() {
     pageLoadMs: Math.round(performance.now()),
     ...(await safe(gpuInfo, {})), ...fontCount(),
     canvas: await safe(canvasHash),
+    hz: await safe(refreshRate),
   };
 
   const hi = await safe(() => nav.userAgentData?.getHighEntropyValues(

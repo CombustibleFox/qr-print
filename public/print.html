@@ -333,7 +333,7 @@ function fit(c, text, maxW) {
 }
 function wrap(c, text, maxW, maxLines) {
   const lines = []; let line = "";
-  for (const word of String(text).split(/(?<=[ ,;/])/)) {
+  for (const word of String(text).split(/(?<=[ ,;/:])/)) {
     if (line && c.measureText(line + word).width > maxW) { lines.push(line.trimEnd()); line = ""; }
     line += word;
   }
@@ -354,21 +354,6 @@ function pumpkin(c, cx, cy, r) {
   for (let i = 0; i <= 6; i++) c.lineTo(cx - r * .7 + i * r * .2333, cy + r * (i % 2 ? .3 : .65));
   c.lineTo(cx + r * .7, cy + r * .3); c.closePath(); c.fill();
   c.restore();
-}
-
-function barcode(c, x, y, w, h, seed) {
-  // Decorative bars driven by the fingerprint hash.
-  let bits = "";
-  for (const ch of seed) bits += parseInt(ch, 16).toString(2).padStart(4, "0");
-  bits = (bits + bits + bits + bits).slice(0, 96);
-  const bw = w / (bits.length * 1.5);
-  let cx = x;
-  for (let i = 0; i < bits.length; i++) {
-    const t = (bits[i] === "1" ? 2 : 1) * bw;
-    c.fillRect(cx, y, t, h);
-    cx += t + bw * 0.6;
-    if (cx > x + w) break;
-  }
 }
 
 // Load the selfie (if any) so the synchronous draw function can use it.
@@ -404,14 +389,13 @@ function photoBox(c, d, x, y, S) {
   if (d._img) { ditherPhoto(c, d._img, x + 4, y + 4, S - 8); return; }
   c.textAlign = "center";
   const cx = x + S / 2;
-  c.font = `bold 18px ${FONT}`;
-  const head = d.camera === "denied" ? "CAMERA DENIED" : "NO CAMERA";
-  c.fillText(head, cx, y + 38);
-  c.setLineDash([6, 5]); c.lineWidth = 2; c.beginPath(); c.moveTo(x + 10, y + 50); c.lineTo(x + S - 10, y + 50); c.stroke(); c.setLineDash([]);
-  c.font = `18px ${FONT}`;
+  c.font = `bold 22px ${FONT}`;
+  c.fillText(d.camera === "denied" ? "CAMERA DENIED" : "NO CAMERA", cx, y + 52);
+  c.setLineDash([6, 5]); c.lineWidth = 2; c.beginPath(); c.moveTo(x + 14, y + 68); c.lineTo(x + S - 14, y + 68); c.stroke(); c.setLineDash([]);
+  c.font = `20px ${FONT}`;
   const msg = d.camera === "denied" ? "Smart move. Nobody gets your face." : "No photo. Your face lives on.";
-  let ly = y + 78;
-  for (const l of wrap(c, msg, S - 20, 5)) { c.fillText(l, cx, ly); ly += 22; }
+  let ly = y + 106;
+  for (const l of wrap(c, msg, S - 28, 5)) { c.fillText(l, cx, ly); ly += 26; }
   c.textAlign = "left";
 }
 
@@ -421,12 +405,11 @@ function dossier(d) {
     let y = 0;
 
     // Banner
-    c.fillRect(0, 0, W, 112);
+    c.fillRect(0, 0, W, 84);
     c.fillStyle = "#fff"; c.textAlign = "center";
-    c.font = `bold 56px ${FONT}`; c.fillText("DEVICE DOSSIER", W / 2, 58);
-    c.font = `bold 24px ${FONT}`; c.fillText("TOP SECRET  *  EYES ONLY  *  BOO", W / 2, 94);
+    c.font = `bold 56px ${FONT}`; c.fillText("DEVICE DOSSIER", W / 2, 60);
     c.fillStyle = "#000"; c.textAlign = "left";
-    y = 112;
+    y = 84;
 
     // Greeting
     const where = [d.city, d.region].filter(Boolean).join(", ") || d.country || "somewhere";
@@ -443,43 +426,41 @@ function dossier(d) {
     const b = d.battery ? `${d.battery.level}%${d.battery.charging ? " (charging)" : ""}` : null;
     const net = d.net ? `${d.net.type} ${d.net.down || "?"}Mbps ${d.net.rtt || "?"}ms` : null;
     const hw = [d.media && `${d.media.cams} cam`, d.media && `${d.media.mics} mic`, d.touch ? `${d.touch}-touch` : null].filter(Boolean).join(" ");
+    const display = d.hz ? `${d.hz}Hz, ${d.hdr ? "HDR" : d.p3 ? "wide-gamut color" : "standard color"}` : (d.hdr ? "HDR" : d.p3 ? "wide-gamut color" : null);
     const sections = [
-      ["WHO YOU ARE", [
-        ["Device", deviceKind(d)], ["OS", parseOS(d) + (d.arch ? ` ${d.arch}${d.bitness || ""}` : "")],
-        ["Browser", parseBrowser(d) + (d.dark ? ", dark mode" : "")], ["Language", d.languages || d.language],
+      ["WHAT YOU'RE RUNNING", [
+        ["OS", parseOS(d) + (d.arch ? ` ${d.arch}${d.bitness || ""}` : "")], ["Browser", parseBrowser(d)],
+        ["Language", d.languages || d.language], ["Theme", d.dark ? "dark mode" : "light mode"],
+        ["Privacy", `cookies ${d.cookies ? "on" : "off"}, DNT ${d.dnt === "1" || d.gpc ? "on (ignored)" : "off"}`],
       ]],
       ["WHERE YOU ARE", [
         ["IP", d.ip], ["City", [d.city, d.region, d.postal].filter(Boolean).join(" ")],
         ["Country", [d.country, d.continent].filter(Boolean).join(" / ")], ["Lat/Lon", geo],
-        ["ISP", d.isp ? `${d.isp}${d.asn ? " AS" + d.asn : ""}` : null],
         ["Timezone", `${d.timezone} (UTC${d.tzOffset >= 0 ? "+" : ""}${d.tzOffset / 60})`],
+        ["ISP", d.isp ? `${d.isp}${d.asn ? " AS" + d.asn : ""}` : null], ["Network", net],
       ]],
       ["WHAT YOU'RE CARRYING", [
-        ["Screen", `${d.screen} @${d.dpr}x, view ${d.viewport}`],
+        ["Device", deviceKind(d)], ["Screen", `${d.screen} @${d.dpr}x, view ${d.viewport}`], ["Display", display],
         ["CPU/RAM", `${d.cores || "?"} cores / ${d.mem ? d.mem + "GB+" : "?"}`],
-        ["GPU", d.gpu], ["Battery", b], ["Network", net], ["Sensors", hw],
-        ["Storage", d.quotaGB ? d.quotaGB + " GB quota" : null],
-        ["Fonts", d.fonts != null ? `${d.fonts}/${d.fontsOf} common installed` : null],
+        ["GPU", d.gpu], ["Battery", b], ["Sensors", hw],
       ]],
     ];
 
-    const LH = 31, KEY_W = 140;
-    const PH = 170; // photo box size
+    const LH = 27, KEY_W = 140;
+    const PH = 270, photoTop = y + 4, photoBottom = photoTop + PH; // photo box
     for (const [i, [title, rows]] of sections.entries()) {
-      const rightW = i === 0 ? PH + 16 : 0;
-      const sectionTop = y;
-      if (i === 0) photoBox(c, d, W - M - PH, y + 4, PH);
+      if (i === 0) photoBox(c, d, W - M - PH, photoTop, PH);
       const live = rows.filter(r => r[1] != null && r[1] !== "" && r[1] !== "undefined");
       if (!live.length) continue;
       c.font = `bold 24px ${FONT}`; c.fillText("[" + title + "]", M, y + 24); y += 32;
       for (const [k, v] of live) {
         c.font = `bold 22px ${FONT}`; c.fillText(k, M, y + 20);
         c.font = `22px ${FONT}`;
-        const ls = wrap(c, v, IW - KEY_W - rightW, 2);
+        const ls = wrap(c, v, IW - KEY_W - (y < photoBottom ? PH + 16 : 0), 2);
         for (const l of ls) { c.fillText(l, M + KEY_W, y + 20); y += LH; }
         if (!ls.length) y += LH;
       }
-      if (i === 0) y = Math.max(y, sectionTop + PH + 4);
+      if (i === 1) y = Math.max(y, photoBottom + 4);
       y += 4;
     }
 
@@ -491,22 +472,28 @@ function dossier(d) {
     // Fingerprint meter
     const bits = uniqueness(d);
     c.setLineDash([10, 8]); c.lineWidth = 3; c.beginPath(); c.moveTo(M, y); c.lineTo(W - M, y); c.stroke(); c.setLineDash([]);
-    y += 32;
+    y += 30;
     c.font = `bold 26px ${FONT}`; c.fillText("UNIQUENESS: 1 in " + fmtOneIn(bits), M, y);
-    y += 12;
+    y += 10;
     c.lineWidth = 4; c.strokeRect(M, y, IW, 26);
     c.fillRect(M + 4, y + 4, (IW - 8) * Math.min(1, bits / 38), 18);
-    y += 54;
+    y += 50;
     c.font = `italic 22px ${FONT}`;
     for (const l of wrap(c, roast(d), IW, 2)) { c.fillText(l, M, y); y += 26; }
 
-    // Footer: barcode + fingerprint
-    const fy = Math.max(y + 8, H - 128);
-    barcode(c, M, fy, IW, 56, d.fp || "0000");
-    c.textAlign = "center";
-    c.font = `bold 28px ${FONT}`; c.fillText("FP-" + (d.fp || "????") + "  " + (d.canvas || "").toUpperCase(), W / 2, fy + 86);
+    // Footer: why a unique device matters
+    const msg = "Your device's unique mix of hardware, software and settings is a fingerprint. " +
+      "Trackers use it to recognize you across different websites and networks, even in private mode, with cookies off, or on new Wi-Fi.";
     c.font = `20px ${FONT}`;
-    c.fillText("Happy Halloween! " + new Date(d.time || Date.now()).toLocaleString(), W / 2, fy + 114);
+    const ml = wrap(c, msg, IW - 36, 6), bh = 56 + ml.length * 25;
+    const by = Math.max(y + 4, H - bh - 46);
+    c.lineWidth = 4; c.strokeRect(M, by, IW, bh);
+    c.font = `bold 24px ${FONT}`; c.fillText("YOU CAN BE FOLLOWED", M + 18, by + 36);
+    c.font = `20px ${FONT}`;
+    ml.forEach((l, k) => c.fillText(l, M + 18, by + 64 + k * 25));
+    c.textAlign = "center";
+    c.font = `20px ${FONT}`;
+    c.fillText("Happy Halloween! " + new Date(d.time || Date.now()).toLocaleString(), W / 2, by + bh + 30);
     c.textAlign = "left";
   };
 }
