@@ -9,8 +9,12 @@ button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6
 </style></head><body>
 <h1>Label kiosk</h1>
 <label>Kiosk key <input id="key" value="change-me"></label>
-<label>BLE service UUID (from nRF Connect) <input id="svc"></label>
-<label>BLE write characteristic UUID <input id="chr"></label>
+<label>BLE service UUID
+  <select id="svcSel"><option value="0000ff00-0000-1000-8000-00805f9b34fb">FF00</option><option value="">Other...</option></select>
+  <input id="svc" hidden></label>
+<label>BLE write characteristic UUID
+  <select id="chrSel"><option value="0000ff02-0000-1000-8000-00805f9b34fb">FF02</option><option value="">Other...</option></select>
+  <input id="chr" hidden></label>
 <label>Width in pixels (4in at 203 DPI ≈ 832, must be a multiple of 8) <input id="w" value="832"></label>
 <button id="pair">1. Pair printer</button>
 <button id="test">Test print</button>
@@ -24,6 +28,18 @@ const log = s => { $("log").textContent = s + "\n" + $("log").textContent; };
 for (const id of ["key","svc","chr","w"]) {
   const v = localStorage.getItem("k_" + id); if (v) $(id).value = v;
   $(id).oninput = () => localStorage.setItem("k_" + id, $(id).value);
+}
+// UUID dropdowns: a preset fills the hidden input; "Other..." reveals it for a custom UUID.
+for (const [sel, inp] of [["svcSel", "svc"], ["chrSel", "chr"]]) {
+  const s = $(sel), i = $(inp);
+  const sync = () => {
+    i.hidden = s.value !== "";
+    if (s.value) i.value = s.value;
+    localStorage.setItem("k_" + inp, i.value);
+  };
+  const saved = i.value && [...s.options].some(o => o.value === i.value);
+  s.value = saved ? i.value : (i.value ? "" : s.options[0].value);
+  s.onchange = sync; sync();
 }
 let chr = null;
 
