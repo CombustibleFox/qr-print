@@ -16,6 +16,13 @@ button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6
   <select id="chrSel"><option value="0000ff02-0000-1000-8000-00805f9b34fb">FF02</option><option value="">Other...</option></select>
   <input id="chr" hidden></label>
 <label>Width in pixels (4in at 203 DPI ≈ 832, must be a multiple of 8) <input id="w" value="832"></label>
+<label>Protocol variant (for troubleshooting)
+  <select id="variant">
+    <option value="B">B: setup + raster (current)</option>
+    <option value="A">A: reset + raster (closest to the first try)</option>
+    <option value="C">C: reset + setup + raster</option>
+    <option value="D">D: raster only</option>
+  </select></label>
 <button id="pair">1. Pair printer</button>
 <button id="test">Test print</button>
 <button id="start">2. Start listening</button>
@@ -48,7 +55,21 @@ $("pair").onclick = async () => {
     const svc = $("svc").value.trim().toLowerCase();
     const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [svc] });
     const server = await dev.gatt.connect();
-    chr = await (await server.getPrimaryService(svc)).getCharacteristic($("chr").value.trim().toLowerCase());
+    dev.addEventListener("gattserverdisconnected", () => { chr = null; $("status").textContent = "Disconnected. Pair again."; log("Printer disconnected"); });
+    const service = await server.getPrimaryService(svc);
+    chr = await service.getCharacteristic($("chr").value.trim().toLowerCase());
+    const p = chr.properties;
+    log(`Write char props: write=${p.write} writeNoResp=${p.writeWithoutResponse} notify=${p.notify}`);
+    for (const c of await service.getCharacteristics()) {
+      log("Found characteristic " + c.uuid.slice(4, 8) + (c.properties.notify ? " (notify)" : ""));
+      if (c.properties.notify) {
+        try {
+          await c.startNotifications();
+          c.addEventListener("characteristicvaluechanged", e =>
+            log("Printer replied on " + c.uuid.slice(4, 8) + ": " + [...new Uint8Array(e.target.value.buffer)].map(b => b.toString(16).padStart(2, "0")).join(" ")));
+        } catch (e) { log("Notify failed on " + c.uuid.slice(4, 8) + ": " + e.message); }
+      }
+    }
     $("status").textContent = "Paired with " + dev.name;
   } catch (e) { $("status").textContent = "Pair failed: " + e.message; }
 };
@@ -81,8 +102,14 @@ async function print(lines) {
   const { out, rowBytes, H } = render(lines);
   // M110/M220-family job header: speed, density, media type (0x0A = labels with gaps), then raster.
   const SPEED = 5, DENSITY = 8, MEDIA = 0x0a;
-  const hdr = [0x1b, 0x4e, 0x0d, SPEED, 0x1b, 0x4e, 0x04, DENSITY, 0x1f, 0x11, MEDIA,
-               0x1d, 0x76, 0x30, 0x00, rowBytes & 255, rowBytes >> 8, H & 255, H >> 8];
+  const raster = [0x1d, 0x76, 0x30, 0x00, rowBytes & 255, rowBytes >> 8, H & 255, H >> 8];
+  const setup = [0x1b, 0x4e, 0x0d, SPEED, 0x1b, 0x4e, 0x04, DENSITY, 0x1f, 0x11, MEDIA];
+  const v = $("variant").value;
+  const hdr = v === "A" ? [0x1b, 0x40, ...raster]            // reset + raster (the first version, which clicked)
+            : v === "C" ? [0x1b, 0x40, ...setup, ...raster]  // reset + setup + raster
+            : v === "D" ? raster                             // raster only
+            : [...setup, ...raster];                         // B: setup + raster
+  log("Variant " + v);
   const data = new Uint8Array([...hdr, ...out]);
   const noResp = chr.properties.writeWithoutResponse;
   log(`Sending ${data.length} bytes (${noResp ? "no response" : "with response"})`);
