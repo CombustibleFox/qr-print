@@ -216,20 +216,17 @@ function m421Header(mediaType = 0x0a, speed = 5, density = 10) {
 }
 
 function m421RasterBlocks(out, rowBytes, height) {
-  // Keep each GS v 0 block at 255 rows or less.
-  const blocks = [];
-  for (let line = 0; line < height; line += 255) {
-    const lines = Math.min(255, height - line);
-    blocks.push(
-      new Uint8Array([
-        0x1d, 0x76, 0x30, 0x00,
-        rowBytes & 0xff, (rowBytes >> 8) & 0xff,
-        lines & 0xff, (lines >> 8) & 0xff
-      ]),
-      out.slice(line * rowBytes, (line + lines) * rowBytes)
-    );
-  }
-  return concatBytes(...blocks);
+  // One GS v 0 block for the whole image. The height field is 16-bit, and this
+  // printer family treats each raster block as its own page, so splitting into
+  // 255-row chunks made it feed to a new label every ~1.25 inches.
+  return concatBytes(
+    new Uint8Array([
+      0x1d, 0x76, 0x30, 0x00,
+      rowBytes & 0xff, (rowBytes >> 8) & 0xff,
+      height & 0xff, (height >> 8) & 0xff
+    ]),
+    out
+  );
 }
 
 function m421Footer() {
