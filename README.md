@@ -9,3 +9,6 @@ Set the kiosk key as a Worker secret (stored in Cloudflare, not in git): `wrangl
 For `wrangler dev`, put `KIOSK_KEY=...` in a `.dev.vars` file (gitignored).
 QR code -> https://qr-print.<you>.workers.dev/
 Kiosk iPhone: open /print.html in Bluefy, enter the UUIDs from nRF Connect, Pair, Test print, Start.
+
+Optional region lock: set a Worker variable `ALLOWED_REGIONS` (e.g. `US-CO`, comma separated) in the dashboard or wrangler.toml `[vars]`. Leave unset to allow everyone.
+Kiosk page: "Stop listening" pauses printing; "Clear queue" deletes all waiting prints.

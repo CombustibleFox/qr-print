@@ -173,13 +173,31 @@ async function snap() {
   finally { stream.getTracks().forEach(t => t.stop()); v.remove(); }
 }
 
+const WINDOW_MS = 5 * 60 * 1000;
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+
 (async () => {
   const msg = document.getElementById("msg");
+  const wait = ms => Math.ceil(ms / 60000) + " min";
+  const since = Date.now() - (+store.get("lastPrint") || 0);
+  if (since < WINDOW_MS) { msg.textContent = `You already got a dossier. Come back in ${wait(WINDOW_MS - since)}. 🎃`; return; }
   try {
     const info = await collect();
+    let vid = store.get("vid");
+    if (!vid) { vid = crypto.randomUUID(); store.set("vid", vid); }
+    info.vid = vid;
     msg.textContent = "Say cheese? 📸";
     Object.assign(info, await snap());
     const r = await fetch("/api/submit", { method: "POST", body: JSON.stringify(info) });
+    if (r.status === 429) {
+      const { retry } = await r.json().catch(() => ({}));
+      msg.textContent = `One dossier per visitor! Try again in ${wait((retry || 300) * 1000)}. 👻`;
+      return;
+    }
+    if (r.ok) store.set("lastPrint", String(Date.now()));
     msg.textContent = r.ok ? "Your dossier is printing. 🖨️👻" : "The ghosts ate your data.";
   } catch { msg.textContent = "No connection. Reload to retry."; }
 })();

@@ -40,6 +40,8 @@ button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6
 <button id="pair">1. Pair printer</button>
 <button id="test">Test print</button>
 <button id="start">2. Start listening</button>
+<button id="stop" disabled>Stop listening</button>
+<button id="clear">Clear queue</button>
 <p id="status">Not connected.</p>
 <pre id="log"></pre>
 <canvas id="cv" hidden></canvas>
@@ -514,18 +516,37 @@ const testLabel = (c, W, H) => {
 
 $("test").onclick = () => chr ? print(testLabel).catch(e => log(e.message)) : log("Pair first.");
 
+let timer = null;
+const k = () => encodeURIComponent($("key").value);
+
 $("start").onclick = () => {
   if (!chr) return log("Pair first.");
+  if (timer) return log("Already listening.");
   $("status").textContent = "Listening...";
+  $("start").disabled = true; $("stop").disabled = false;
   let busy = false;
-  setInterval(async () => {
+  timer = setInterval(async () => {
     if (busy) return; busy = true;
     try {
-      const k = encodeURIComponent($("key").value);
-      const job = await (await fetch("/api/next?key=" + k)).json();
-      if (job) { log(`Job ${job.id.slice(0, 8)}: camera=${job.data.camera || "n/a"}, photo=${job.data.photo ? job.data.photo.length + " chars" : "none"}${job.data.camErr ? ", err=" + job.data.camErr : ""}`); await print(dossier(await prep(job.data))); await fetch(`/api/ack?key=${k}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
+      const job = await (await fetch("/api/next?key=" + k())).json();
+      if (job) { log(`Job ${job.id.slice(0, 8)}: camera=${job.data.camera || "n/a"}, photo=${job.data.photo ? job.data.photo.length + " chars" : "none"}${job.data.camErr ? ", err=" + job.data.camErr : ""}`); await print(dossier(await prep(job.data))); await fetch(`/api/ack?key=${k()}&id=${job.id}`, { method: "POST" }); log("Printed " + job.id.slice(0, 8)); }
     } catch (e) { log("Error: " + e.message); }
     busy = false;
   }, 3000);
+};
+
+$("stop").onclick = () => {
+  clearInterval(timer); timer = null;
+  $("status").textContent = chr ? "Paused. Press Start to resume." : "Not connected.";
+  $("start").disabled = false; $("stop").disabled = true;
+  log("Stopped listening (a label already being sent will finish).");
+};
+
+$("clear").onclick = async () => {
+  if (!confirm("Delete all waiting prints from the queue?")) return;
+  try {
+    const r = await fetch("/api/clear?key=" + k(), { method: "POST" });
+    log(r.ok ? "Queue cleared: " + (await r.json()).cleared + " job(s) removed." : "Clear failed: HTTP " + r.status);
+  } catch (e) { log("Clear failed: " + e.message); }
 };
 </script></body></html>
