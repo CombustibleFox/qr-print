@@ -5,7 +5,11 @@
 <style>
 body{font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:1.5rem auto;padding:0 1rem}
 input{font:inherit;width:100%;box-sizing:border-box;margin:.2rem 0 .8rem}
-button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6rem;overflow:auto;max-height:40vh}
+button{font:inherit;padding:.6rem 1rem}#queue{border:1px solid #ccc;border-radius:.3rem;max-height:30vh;overflow:auto;font-size:14px}
+#queue div{display:flex;gap:.5rem;align-items:center;padding:.3rem .5rem;border-bottom:1px solid #eee}
+#queue div:first-child{background:#fff6e0}#queue span{flex:1}#queue button{padding:.1rem .5rem}
+h2 small{font-weight:normal;color:#666}h2 button{font-size:.8rem;padding:.2rem .6rem}
+pre{background:#eee;color:#111;padding:.6rem;overflow:auto;max-height:40vh}
 </style></head><body>
 <h1>Label kiosk</h1>
 <label>Kiosk key <input id="key" value="change-me"></label>
@@ -42,6 +46,8 @@ button{font:inherit;padding:.6rem 1rem}pre{background:#eee;color:#111;padding:.6
 <button id="start">2. Start listening</button>
 <button id="stop" disabled>Stop listening</button>
 <button id="clear">Clear queue</button>
+<h2>Queue <small id="qcount"></small> <button id="qrefresh">Refresh</button></h2>
+<div id="queue"></div>
 <p id="status">Not connected.</p>
 <pre id="log"></pre>
 <canvas id="cv" hidden></canvas>
@@ -535,6 +541,33 @@ $("start").onclick = () => {
   }, 3000);
 };
 
+async function refreshQueue() {
+  const box = $("queue");
+  try {
+    const r = await fetch("/api/queue?key=" + k());
+    if (!r.ok) { $("qcount").textContent = r.status === 403 ? "(wrong kiosk key)" : "(error " + r.status + ")"; return; }
+    const jobs = await r.json();
+    $("qcount").textContent = `(${jobs.length} waiting)`;
+    box.replaceChildren(...(jobs.length ? jobs : [null]).map((j, i) => {
+      const row = document.createElement("div");
+      if (!j) { row.textContent = "Queue is empty."; return row; }
+      const where = [j.city, j.region].filter(Boolean).join(", ") || j.country || "unknown location";
+      const t = j.time ? new Date(j.time).toLocaleTimeString() : "?";
+      const label = document.createElement("span");
+      // textContent only: queue data comes from visitors and is untrusted.
+      label.textContent = `${i === 0 ? "Next: " : ""}${t} · ${deviceKind(j)} · ${where} · camera ${j.camera || "n/a"}`;
+      const del = document.createElement("button");
+      del.textContent = "Remove";
+      del.onclick = async () => { await fetch(`/api/ack?key=${k()}&id=${encodeURIComponent(j.id)}`, { method: "POST" }); log("Removed " + j.id.slice(0, 8)); refreshQueue(); };
+      row.append(label, del);
+      return row;
+    }));
+  } catch (e) { $("qcount").textContent = "(offline)"; }
+}
+$("qrefresh").onclick = refreshQueue;
+refreshQueue();
+setInterval(refreshQueue, 5000);
+
 $("stop").onclick = () => {
   clearInterval(timer); timer = null;
   $("status").textContent = chr ? "Paused. Press Start to resume." : "Not connected.";
@@ -547,6 +580,7 @@ $("clear").onclick = async () => {
   try {
     const r = await fetch("/api/clear?key=" + k(), { method: "POST" });
     log(r.ok ? "Queue cleared: " + (await r.json()).cleared + " job(s) removed." : "Clear failed: HTTP " + r.status);
+    refreshQueue();
   } catch (e) { log("Clear failed: " + e.message); }
 };
 </script></body></html>

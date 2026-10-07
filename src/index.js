@@ -37,6 +37,7 @@ export default {
     if (url.pathname.startsWith("/api/") && (!env.KIOSK_KEY || url.searchParams.get("key") !== env.KIOSK_KEY))
       return new Response("forbidden", { status: 403 });
     if (url.pathname === "/api/next") return q.fetch("https://q/next");
+    if (url.pathname === "/api/queue") return q.fetch("https://q/list");
     if (url.pathname === "/api/clear" && req.method === "POST") return q.fetch("https://q/clear", { method: "POST" });
     if (url.pathname === "/api/ack") return q.fetch("https://q/ack?id=" + url.searchParams.get("id"), { method: "POST" });
     return new Response("not found", { status: 404 });
@@ -68,6 +69,14 @@ export class Queue {
     if (p.pathname === "/next") {
       const [first] = [...(await st.list({ prefix: "i:", limit: 1 })).entries()];
       return Response.json(first ? { id: first[0], data: first[1] } : null);
+    }
+    if (p.pathname === "/list") {
+      // Summaries only: no photos or full payloads.
+      const jobs = [...(await st.list({ prefix: "i:" })).entries()].map(([id, d]) => ({
+        id, time: d.time, city: d.city, region: d.region, country: d.country,
+        userAgent: d.userAgent, model: d.model, camera: d.camera,
+      }));
+      return Response.json(jobs);
     }
     if (p.pathname === "/clear") {
       const keys = [...(await st.list({ prefix: "i:" })).keys()];
